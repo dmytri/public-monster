@@ -6,24 +6,40 @@
 <title>public.monster - Your Public HTML Space</title>
 <script type="module">
 import { register } from "https://esm.run/@teamhanko/hanko-elements";
-const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
-console.log('Hanko ready');
-const auth = (auth=false, uid=null) => {
-  const form = document.getElementById('auth');
-  const upl = document.getElementById('upload');
-  const a   = document.getElementById('link');
-  form.style.display = auth ? 'none' : 'block';
-  upl.style.display  = auth ? 'block' : 'none';
-  a.href = '/~' + auth ? uid : 'you';
-  a.textContent = '/~' + auth ? uid : 'you';
-}
-hanko.onSessionCreated((event) => {
-  console.log('Session created:', event.detail);
-  auth(true, 'me')
-});
-const token = await hanko.getSessionToken();
-if (token) {
-  auth(true,'hello');
+
+let currentUserId = null;
+let hankoToken = null;
+
+if ('HANKO_API_URL_PLACEHOLDER') {
+  const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
+  
+  const showAuth = () => {
+    document.getElementById('auth').style.display = 'block';
+    document.getElementById('upload').style.display = 'none';
+  };
+  
+  const showUpload = (userId) => {
+    currentUserId = userId;
+    document.getElementById('auth').style.display = 'none';
+    document.getElementById('upload').style.display = 'block';
+    document.getElementById('link').href = '/~' + userId + '/';
+    document.getElementById('link').textContent = '/~' + userId + '/';
+  };
+  
+  hanko.onSessionCreated(async (event) => {
+    hankoToken = await hanko.getSessionToken();
+    const userId = event.detail.userID;
+    showUpload(userId);
+  });
+  
+  const token = await hanko.getSessionToken();
+  if (token) {
+    hankoToken = token;
+    const session = await hanko.session.get();
+    if (session?.userID) {
+      showUpload(session.userID);
+    }
+  }
 }
 </script>
 <style>
@@ -61,8 +77,59 @@ a{color:#00f;text-decoration:underline}
 <p>Your site: <a href="#" id="link"></a></p>
 </div>
 <script>
-window.addEventListener('hanko-ready', () => {
+const form = document.getElementById('uploadForm');
+const status = document.getElementById('status');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const filesInput = document.getElementById('files');
+  const folderInput = document.getElementById('folder');
+  const files = [...(filesInput.files || []), ...(folderInput.files || [])];
+  
+  if (files.length === 0) {
+    status.textContent = '❌ No files selected';
+    return;
+  }
+  
+  status.textContent = `⏳ Uploading ${files.length} file(s)...`;
+  
+  let count = 0;
+  for (const file of files) {
+    count++;
+    status.textContent = `⏳ Uploading ${count}/${files.length}: ${file.name}...`;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', file.webkitRelativePath || file.name);
+    
+    try {
+      const headers = {};
+      if (window.hankoToken) {
+        headers['Authorization'] = 'Bearer ' + window.hankoToken;
+      }
+      
+      const res = await fetch('/upload', {
+        method: 'POST',
+        headers: headers,
+        body: formData
+      });
+      
+      if (!res.ok) {
+        status.textContent = `❌ Upload failed (${count}/${files.length}): ${file.name}`;
+        return;
+      }
+    } catch (err) {
+      status.textContent = `❌ Error: ${err.message}`;
+      return;
+    }
+  }
+  
+  status.textContent = `✅ Uploaded ${files.length} file(s)!`;
+  filesInput.value = '';
+  folderInput.value = '';
 });
+
+// Make hankoToken available globally
+window.hankoToken = null;
 </script>
 <footer style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px groove #999;font-size:0.9em">
 by <a href="https://dmytri.to" target="_blank" rel="noopener">dmytri.to</a>
