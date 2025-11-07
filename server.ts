@@ -5,8 +5,26 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 
 const PUBLIC_DIR = process.env.PUBLIC_DIR || "/tmp/public_html";
 const HANKO_API_URL = process.env.HANKO_API_URL;
+const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
+const BUNNY_API_KEY = process.env.BUNNY_API_KEY;
 
 const JWKS = HANKO_API_URL ? createRemoteJWKSet(new URL(`${HANKO_API_URL}/.well-known/jwks.json`)) : null;
+
+async function copyToBunny(targetPath: string, blob: Blob) {
+  if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) return;
+  const url = new URL(`/` + encodeURI(targetPath) , BUNNY_STORAGE_URL ).toString().replace( /\/+$/, '' );
+  await fetch( url, { method:"PUT", headers:{ AccessKey:BUNNY_API_KEY }, body:blob } );
+}
+
+async function copyFromBunny(targetPath: string, localFile: string) {
+  if (!BUNNY_STORAGE_URL) return false;
+  const url = new URL(`/download?file=${encodeURIComponent(targetPath)}`, BUNNY_STORAGE_URL ).toString();
+  const res = await fetch(url, { headers:{ AccessKey:BUNNY_API_KEY } } );
+  if (!res.ok) return false;
+  await mkdir(dirname(localFile), { recursive: true });
+  await Bun.write(localFile, res);
+  return true;
+}
 
 serve({
   port: 3000,
@@ -21,12 +39,26 @@ serve({
         return Response.redirect(url.pathname + '/', 301);
       }
       const filePath = path.join("/") || "index.html";
-      const file = Bun.file(join(PUBLIC_DIR, username, filePath));
+      const localPath = join(PUBLIC_DIR, username, filePath);
+
+      // first try local cache
+      const file = Bun.file(localPath);
       if (await file.exists()) {
         const ext = filePath.split('.').pop();
         const types: Record<string, string> = {css:'text/css',js:'application/javascript',png:'image/png',jpg:'image/jpeg',gif:'image/gif',svg:'image/svg+xml',html:'text/html',txt:'text/plain'};
         return new Response(file, { headers: { 'Content-Type': types[ext || ''] || 'application/octet-stream' } });
       }
+
+      // not local; try to prime cache from Bunny
+      if (BUNNY_STORAGE_URL) {
+        const cached = await copyFromBunny(join(username, filePath), localPath);
+        if (cached && (await file.exists())) {
+          const ext = filePath.split('.').pop();
+          const types: Record<string, string> = {css:'text/css',js:'application/javascript',png:'image/png',jpg:'image/jpeg',gif:'image/gif',svg:'image/svg+xml',html:'text/html',txt:'text/plain'};
+          return new Response(file, { headers: { 'Content-Type': types[ext || ''] || 'application/octet-stream' } });
+        }
+      }
+
       return new Response("Not found", { status: 404 });
     }
 
@@ -59,6 +91,7 @@ serve({
       const fullPath = join(PUBLIC_DIR, userId, path);
       await mkdir(dirname(fullPath), { recursive: true });
       await Bun.write(fullPath, file);
+      await copyToBunny(join(userId, path), file);          // also push into Bunny
       return new Response("OK");
     }
 
