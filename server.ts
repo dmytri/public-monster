@@ -4,6 +4,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 const HANKO_API_URL = process.env.HANKO_API_URL;
 const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
 const BUNNY_API_KEY = process.env.BUNNY_API_KEY;
+const BUNNY_PULL_ZONE = process.env.BUNNY_PULL_ZONE;
 
 const JWKS = HANKO_API_URL ? createRemoteJWKSet(new URL(`${HANKO_API_URL}/.well-known/jwks.json`)) : null;
 
@@ -14,14 +15,6 @@ async function uploadToBunny(targetPath: string, blob: Blob) {
   if (!res.ok) throw new Error("Upload failed");
 }
 
-async function getFromBunny(targetPath: string) {
-  if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) return null;
-  const url = BUNNY_STORAGE_URL + '/' + encodeURI(targetPath);
-  const res = await fetch(url, { headers:{ AccessKey:BUNNY_API_KEY } });
-  if (!res.ok) return null;
-  return res;
-}
-
 serve({
   port: 3000,
   async fetch(req) {
@@ -30,20 +23,15 @@ serve({
     if (url.pathname.startsWith("/~")) {
       const parts = url.pathname.slice(2).split("/");
       const username = parts[0];
-      const path = parts.slice(1);
-      if (path.length === 0 && !url.pathname.endsWith('/')) {
-        return Response.redirect(url.pathname + '/', 301);
+      const path = parts.slice(1).join("/");
+      
+      if (!BUNNY_PULL_ZONE) {
+        return new Response("CDN not configured", { status: 500 });
       }
-      const filePath = path.join("/") || "index.html";
-
-      const res = await getFromBunny(username + '/' + filePath);
-      if (res) {
-        const ext = filePath.split('.').pop();
-        const types: Record<string, string> = {css:'text/css',js:'application/javascript',png:'image/png',jpg:'image/jpeg',gif:'image/gif',svg:'image/svg+xml',html:'text/html',txt:'text/plain'};
-        return new Response(res.body, { headers: { 'Content-Type': types[ext || ''] || 'application/octet-stream' } });
-      }
-
-      return new Response("Not found", { status: 404 });
+      
+      const cdnPath = path || "index.html";
+      const cdnUrl = `${BUNNY_PULL_ZONE}/${username}/${cdnPath}`;
+      return Response.redirect(cdnUrl, 302);
     }
 
     if (url.pathname === "/upload" && req.method === "POST") {
