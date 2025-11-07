@@ -47,12 +47,12 @@ serve({
     }
 
     if (url.pathname === "/upload" && req.method === "POST") {
-      let userId: string | null = null;
+      let username: string | null = null;
       const token = req.headers.get("Authorization")?.replace("Bearer ", "");
       if (token && JWKS) {
         try {
           const { payload } = await jwtVerify(token, JWKS);
-          userId = payload.sub!;
+          username = payload.username as string;
         } catch {
           return new Response("Unauthorized", { status: 401 });
         }
@@ -60,7 +60,7 @@ serve({
         return new Response("Unauthorized", { status: 401 });
       } else {
         // demo mode – fallback user
-        userId = "you";
+        username = "you";
       }
 
       const form = await req.formData();
@@ -69,7 +69,7 @@ serve({
       if (!file || !path) return new Response("Bad request", { status: 400 });
       
       try {
-        await uploadToBunny(userId + '/' + path, file);
+        await uploadToBunny(username + '/' + path, file);
         return new Response("OK");
       } catch (err) {
         return new Response("Upload failed", { status: 500 });
