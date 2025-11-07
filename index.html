@@ -34,30 +34,19 @@ register('HANKO_API_URL_PLACEHOLDER');
 </main>
 
 <script>
-window.addEventListener('hankoReady', async () => {
-  document.getElementById('auth').style.display='none';
-  document.getElementById('upload').style.display='block';
+window.addEventListener('DOMContentLoaded', () => {
+  const auth = document.getElementById('auth');
+  const upl = document.getElementById('upload');
+  const a   = document.getElementById('l');
 
-  const uid = await window.hanko.user.getCurrent().id;
-  const a = document.getElementById('l');
-  a.href='/~'+uid; a.textContent='/~'+uid;
-
-  document.getElementById('u').onsubmit=async(e=>{
-    e.preventDefault();
-    const s=document.getElementById('s'), files=document.getElementById('f').files;
-    s.textContent='Uploading...';
-    for(let i=0;i<files.length;i++){
-      const form=new FormData();
-      form.append('file', files[i]);
-      form.append('path', files[i].name);
-      await fetch('/upload',{
-        method:'POST',
-        body:form,
-        headers:{Authorization:`Bearer ${await window.hanko.session.getJWT()}`}
-      });
-    }
-    s.textContent='✅ Done!';
-  });
+  document.querySelector('hanko-auth')
+    .addEventListener('onSessionCreated', async () => {
+      const uid = (await window.hanko.user.getCurrent()).id;
+      auth.style.display = 'none';
+      upl.style.display  = 'block';
+      a.href = '/~' + uid;
+      a.textContent = '/~' + uid;
+    });
 });
 </script>
 </body>
