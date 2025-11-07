@@ -10,36 +10,34 @@ import { register } from "https://esm.run/@teamhanko/hanko-elements";
 let currentUserId = null;
 let hankoToken = null;
 
-if ('HANKO_API_URL_PLACEHOLDER') {
-  const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
-  
-  const showAuth = () => {
-    document.getElementById('auth').style.display = 'block';
-    document.getElementById('upload').style.display = 'none';
-  };
-  
-  const showUpload = (userId) => {
-    currentUserId = userId;
-    document.getElementById('auth').style.display = 'none';
-    document.getElementById('upload').style.display = 'block';
-    document.getElementById('link').href = '/~' + userId + '/';
-    document.getElementById('link').textContent = '/~' + userId + '/';
-  };
-  
-  hanko.onSessionCreated(async (event) => {
-    hankoToken = await hanko.getSessionToken();
-    const userId = event.detail.userID;
-    showUpload(userId);
-  });
-  
-  const token = await hanko.getSessionToken();
-  if (token) {
-    hankoToken = token;
-    const session = await hanko.session.get();
-    if (session?.userID) {
-      showUpload(session.userID);
-    }
-  }
+const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
+
+const showAuth = () => {
+  document.getElementById('auth').style.display = 'block';
+  document.getElementById('upload').style.display = 'none';
+};
+
+const showUpload = (userId) => {
+  currentUserId = userId;
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('upload').style.display = 'block';
+  document.getElementById('link').href = '/~' + userId + '/';
+  document.getElementById('link').textContent = '/~' + userId + '/';
+};
+
+hanko.onSessionCreated(async (event) => {
+  hankoToken = await hanko.getSessionToken();
+  const user = await hanko.getUser(); 
+  const userId = user.username;
+  showUpload(userId);
+});
+
+const token = await hanko.getSessionToken();
+if (token) {
+  const user = await hanko.getUser(); 
+  const userId = user.username;
+  console.log(user);
+  showUpload(userId);
 }
 </script>
 <style>
