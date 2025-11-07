@@ -2,113 +2,63 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>public.monster - Your Public HTML Space</title>
+<title>public.monster</title>
 <script type="module">
 import { register } from '/hanko-elements.js';
-const hankoApi = 'HANKO_API_URL_PLACEHOLDER';
-if (hankoApi) {
-  register(hankoApi).then(() => {
-    console.log('Hanko registered successfully');
-    window.dispatchEvent(new Event('hanko-ready'));
-  }).catch(err => {
-    console.error('Hanko registration failed:', err);
-  });
-} else {
-  console.error('HANKO_API_URL not set');
-}
+register('HANKO_API_URL_PLACEHOLDER');
 </script>
 <style>
-body{background:#008080;color:#000;font-family:"Comic Sans MS",cursive;margin:20px}
-main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto}
-h1{color:#ff00ff;text-shadow:2px 2px #000;font-size:2.5em;margin:0}
-h2{color:#00f;text-decoration:underline}
-form{background:#fff;border:2px inset #999;padding:15px;margin:20px 0}
-input,button{font-family:inherit;font-size:1em;margin:5px}
-button{background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer}
-button:active{border-style:inset}
-a{color:#00f;text-decoration:underline}
-.blink{animation:blink 1s infinite}
-@keyframes blink{50%{opacity:0}}
-#auth{display:block}
-#upload{display:none}
+  body{background:#008080;color:#000;font-family:"Comic Sans MS",cursive;margin:20px}
+  main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto}
+  .blink{animation:blink 1s infinite}@keyframes blink{50%{opacity:0}}
+  #auth{display:block}#upload{display:none}
 </style>
 </head>
 <body>
-<main role="main">
-<h1>🌐 Welcome to public.monster! 🌐</h1>
-<p class="blink">⚡ Your personal corner of the web! ⚡</p>
-<div id="auth">
-<h2>Login / Sign Up</h2>
-<hanko-auth experimental="passkey:disabled,password:disabled,mfa:disabled"></hanko-auth>
-</div>
-<div id="upload">
-<h2>Upload Your Site</h2>
-<form id="uploadForm" aria-label="Upload files">
-<label for="files">Files: <input id="files" type="file" multiple></label><br>
-<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label><br>
-<button type="submit" id="btn">🚀 Upload</button>
-<p id="status"></p>
-</form>
-<p>Your site: <a href="#" id="link"></a></p>
-</div>
+<main>
+  <h1>🌐 Welcome to public.monster! 🌐</h1>
+  <p class="blink">⚡ Your personal corner of the web! ⚡</p>
+
+  <div id="auth">
+    <hanko-auth experimental="passkey:disabled,password:disabled,mfa:disabled"></hanko-auth>
+  </div>
+
+  <div id="upload">
+    <h2>Upload Your Site</h2>
+    <form id="u">
+      <input type="file" id="f" multiple>
+      <button type="submit">🚀 Upload</button><p id="s"></p>
+    </form>
+    Your site: <a id="l" target="_blank"></a>
+  </div>
+</main>
+
 <script>
-window.addEventListener('hanko-ready', () => {
-  console.log('Hanko ready');
-  const hankoEl = document.querySelector('hanko-auth');
+window.addEventListener('hankoReady', async () => {
+  document.getElementById('auth').style.display='none';
+  document.getElementById('upload').style.display='block';
 
-  // fire when Hanko finishes its login/new-account flow
-  hankoEl.addEventListener('onAuthFlowCompleted', async (e) => {
-    console.log('Auth flow completed', e.detail);
-    const session = await window.hanko.session.get();
-    if (!session) {
-      alert('No session – please try logging in again');
-      return;
+  const uid = await window.hanko.user.getCurrent().id;
+  const a = document.getElementById('l');
+  a.href='/~'+uid; a.textContent='/~'+uid;
+
+  document.getElementById('u').onsubmit=async(e=>{
+    e.preventDefault();
+    const s=document.getElementById('s'), files=document.getElementById('f').files;
+    s.textContent='Uploading...';
+    for(let i=0;i<files.length;i++){
+      const form=new FormData();
+      form.append('file', files[i]);
+      form.append('path', files[i].name);
+      await fetch('/upload',{
+        method:'POST',
+        body:form,
+        headers:{Authorization:`Bearer ${await window.hanko.session.getJWT()}`}
+      });
     }
-
-    document.getElementById('auth').style.display = 'none';
-    document.getElementById('upload').style.display = 'block';
-
-    const uid = session.userID;
-    const a = document.getElementById('link');
-    a.href = '/~' + uid;
-    a.textContent = '/~' + uid;
-
-    document.getElementById('uploadForm').onsubmit = async (ev) => {
-      ev.preventDefault();
-      const btn = document.getElementById('btn');
-      const status = document.getElementById('status');
-      const allFiles = [
-        ...document.getElementById('files').files,
-        ...document.getElementById('folder').files
-      ];
-      btn.disabled = true;
-      status.textContent = 'Uploading...';
-      for (let i = 0; i < allFiles.length; i++) {
-        const f = allFiles[i];
-        status.textContent = `${i+1}/${allFiles.length}: ${f.name}`;
-        const formData = new FormData();
-        formData.append('file', f);
-        formData.append('path', f.webkitRelativePath || f.name);
-        await fetch('/upload', {
-          method: 'POST',
-          body: formData,
-          headers: { Authorization: `Bearer ${session.jwt}` }
-        });
-      }
-      status.textContent = '✅ Done!';
-      btn.disabled = false;
-    };
-  });
-
-  hankoEl.addEventListener('onError', err => {
-    console.error('Hanko error:', err.detail);
+    s.textContent='✅ Done!';
   });
 });
 </script>
-<footer style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px groove #999;font-size:0.9em">
-by <a href="https://dmytri.to" target="_blank" rel="noopener">dmytri.to</a>
-</footer>
-</main>
 </body>
 </html>
