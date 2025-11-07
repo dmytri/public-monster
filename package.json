@@ -1,0 +1,7 @@
+{
+  "name": "public-html-host",
+  "dependencies": {
+    "@teamhanko/hanko-elements": "^1.0.0",
+    "jose": "^6.1.0"
+  }
+}

@@ -1,0 +1,29 @@
+---
+- hosts: localhost
+  vars:
+    dockerhub_user: "{{ lookup('env', 'DOCKERHUB_USERNAME') }}"
+    image_name: "{{ dockerhub_user }}/public-html-host"
+    image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
+  tasks:
+    - name: Build and push Docker image
+      shell: |
+        echo "${{ lookup('env', 'DOCKERHUB_TOKEN') }}" | podman login docker.io -u {{ dockerhub_user }} --password-stdin
+        podman build -t {{ image_name }}:{{ image_tag }} .
+        podman push {{ image_name }}:{{ image_tag }}
+      args:
+        chdir: "{{ playbook_dir }}"
+    
+    - name: Deploy to Bunny.net
+      uri:
+        url: "https://api.bunny.net/compute/deploy"
+        method: POST
+        headers:
+          AccessKey: "{{ lookup('env', 'BUNNY_API_KEY') }}"
+        body_format: json
+        body:
+          image: "{{ image_name }}:{{ image_tag }}"
+          domain: "public.monster"
+          env:
+            HANKO_API_URL: "{{ lookup('env', 'HANKO_API_URL') }}"
+            BUNNY_STORAGE_URL: "{{ lookup('env', 'BUNNY_STORAGE_URL') }}"
+            BUNNY_API_KEY: "{{ lookup('env', 'BUNNY_API_KEY') }}"

@@ -1,0 +1,29 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "public-html-host",
+      "dependencies": {
+        "@teamhanko/hanko-elements": "^1.0.0",
+        "jose": "^6.1.0",
+      },
+    },
+  },
+  "packages": {
+    "@denysvuika/preact-translate": ["@denysvuika/preact-translate@0.5.1", "", { "peerDependencies": { "preact": ">=10.13.0" } }, "sha512-qqKkpjzR8E55nlLA+H3gP9Q99mCCWiTtRupVQBh8YRZljX+Q8YbsaJtV3F+TX4DR4lV8NLgvv2+sSUcHoWvNtQ=="],
+
+    "@teamhanko/hanko-elements": ["@teamhanko/hanko-elements@1.5.2", "", { "dependencies": { "@denysvuika/preact-translate": "^0.5.0", "@teamhanko/hanko-frontend-sdk": "^1.5.2", "@teamhanko/preact-custom-element": "^4.2.2", "classnames": "^2.3.2", "preact": "^10.13.1" } }, "sha512-RrOgSoKwHbysDOOffOHn3p8s/zXxY2qvWwZFQdMeEP8Qp/C/RQBwGOzax0Y2gySWflDHM2uu4+tW8dXB+mZfQg=="],
+
+    "@teamhanko/hanko-frontend-sdk": ["@teamhanko/hanko-frontend-sdk@1.5.2", "", { "dependencies": { "@types/js-cookie": "^3.0.3" } }, "sha512-sSY2NGsJRndrC4HwxBIdog9gOGUzJ3EGKmEn7p+rzXzJaLik3ywJb25DloegPekMZQ8hwOzliF0uJh7kNxFgTA=="],
+
+    "@teamhanko/preact-custom-element": ["@teamhanko/preact-custom-element@4.2.2", "", { "peerDependencies": { "preact": "10.x" } }, "sha512-3djCQr25IxQIgpidxD8J0fTQ7/hMuoa5Nmv7delQc6sX4kXgv9e/pE01cywpmGZLi69H1KUH4dmZ4cPPJQrsQQ=="],
+
+    "@types/js-cookie": ["@types/js-cookie@3.0.6", "", {}, "sha512-wkw9yd1kEXOPnvEeEV1Go1MmxtBJL0RR79aOTAApecWFVu7w0NNXNqhcWgvw2YgZDYadliXkl14pa3WXw5jlCQ=="],
+
+    "classnames": ["classnames@2.5.1", "", {}, "sha512-saHYOzhIQs6wy2sVxTM6bUDsQO4F50V9RQ22qBpEdCW+I+/Wmke2HOl6lS6dTpdxVhb88/I6+Hs+438c3lfUow=="],
+
+    "jose": ["jose@6.1.0", "", {}, "sha512-TTQJyoEoKcC1lscpVDCSsVgYzUDg/0Bt3WE//WiTPK6uOCQC2KZS4MpugbMWt/zyjkopgZoXhZuCi00gLudfUA=="],
+
+    "preact": ["preact@10.27.2", "", {}, "sha512-5SYSgFKSyhCbk6SrXyMpqjb5+MQBgfvEKE/OC+PujcY34sOpqtr+0AZQtPYx5IA6VxynQ7rUPCtKzyovpj9Bpg=="],
+  }
+}
