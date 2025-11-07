@@ -65,7 +65,7 @@ hankoEl.addEventListener('onUserCreated', (event) => {
   console.log('User created:', event.detail);
 });
 
-hankoEl.addEventListener('onAuthFlowCompleted', async (event) => {
+hankoEl.addEventListener('hanko-auth-flow-completed', async (event) => {
   console.log('Auth flow completed:', event.detail);
   try {
     const hanko = event.detail.hanko;
