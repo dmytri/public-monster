@@ -12,7 +12,7 @@ const JWKS = HANKO_API_URL ? createRemoteJWKSet(new URL(`${HANKO_API_URL}/.well-
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const BLOCKED_EXTENSIONS = ['.exe', '.sh', '.bin', '.bat', '.cmd', '.com', '.scr', '.msi'];
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX = 20; // max uploads per window
+const RATE_LIMIT_MAX = 30; // max uploads per window
 
 // Rate limiting storage
 const uploadCounts = new Map<string, { count: number; resetAt: number }>();

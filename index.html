@@ -126,7 +126,7 @@ form.addEventListener('submit', async (e) => {
       
       // Small delay between uploads to avoid rate limiting
       if (count < files.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     } catch (err) {
       status.textContent = `❌ Error: ${err.message}`;
