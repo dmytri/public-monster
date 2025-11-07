@@ -30,7 +30,7 @@ serve({
       }
       
       const cdnPath = path || "index.html";
-      const cdnUrl = `${BUNNY_PULL_ZONE}/${username}/${cdnPath}`;
+      const cdnUrl = `${BUNNY_PULL_ZONE}/~${username}/${cdnPath}`;
       return Response.redirect(cdnUrl, 302);
     }
 
@@ -57,7 +57,7 @@ serve({
       if (!file || !path) return new Response("Bad request", { status: 400 });
       
       try {
-        await uploadToBunny(username + '/' + path, file);
+        await uploadToBunny('~' + username + '/' + path, file);
         return new Response("OK");
       } catch (err) {
         return new Response("Upload failed", { status: 500 });
