@@ -46,11 +46,6 @@ serve({
       return new Response("Not found", { status: 404 });
     }
 
-    if (url.pathname === "/hanko-elements.js") {
-      const file = Bun.file("node_modules/@teamhanko/hanko-elements/dist/elements.js");
-      return new Response(file, { headers: { "Content-Type": "application/javascript" } });
-    }
-
     if (url.pathname === "/upload" && req.method === "POST") {
       let userId: string | null = null;
       const token = req.headers.get("Authorization")?.replace("Bearer ", "");
