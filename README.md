@@ -34,13 +34,12 @@ That's it. No webpack. No npm install. No "building for production."
 
 Just HTML. Just vibes.
 
-## Tech Stack (for the nerds)
+## Tech Stack
 
 - **Runtime:** Bun
 - **Auth:** Hanko (passwordless)
 - **Storage:** Local filesystem (or Bunny Storage for prod)
 - **Hosting:** Bunny.net edge containers
-- **Lines of code:** ~250 (we keep it simple)
 
 ## Run Locally
 
@@ -81,7 +80,7 @@ We believe:
 
 Built with ❤️ by [dmytri.to](https://dmytri.to)
 
-Inspired by GeoCities, Angelfire, and the wild west web of the 90s.
+Inspired by the wild world wide web of the 90s.
 
 ---
 

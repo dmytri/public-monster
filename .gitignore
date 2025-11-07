@@ -34,3 +34,4 @@ pnpm-debug.log*
 *.pid
 *.seed
 *.pid.lock
+.aider*
