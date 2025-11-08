@@ -111,6 +111,11 @@ serve({
       return new Response(file, { headers: { "Content-Type": "text/html" } });
     }
 
+    if (url.pathname === "/faq") {
+      const file = Bun.file("faq.html");
+      return new Response(file, { headers: { "Content-Type": "text/html" } });
+    }
+
     const html = await Bun.file("index.html").text();
     const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
     return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
