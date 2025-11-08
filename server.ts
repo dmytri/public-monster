@@ -106,6 +106,12 @@ serve({
       }
     }
 
+    if (url.pathname === "/social-card.png") {
+      const file = Bun.file("social-card.png");
+      // correct content type AI!
+      return new Response(file, { headers: { "Content-Type": "text/html" } });
+    }
+
     if (url.pathname === "/about") {
       const file = Bun.file("about.html");
       return new Response(file, { headers: { "Content-Type": "text/html" } });
