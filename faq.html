@@ -84,6 +84,18 @@ code {
   padding: 2px 6px;
   border: 1px solid #999;
 }
+pre {
+  background: #000;
+  color: #0f0;
+  padding: 15px;
+  border: 2px solid #0f0;
+  overflow-x: auto;
+  font-family: monospace;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+pre .tag { color: #0ff; }
+pre .text { color: #ff0; }
 .construction{text-align:center;margin:20px 0;font-size:1em;background:#ff69b4;color:#000;padding:10px;font-weight:bold}
 </style>
 </head>
@@ -126,14 +138,14 @@ A: Yes! Upload folders, images, stylesheets, scripts - everything. Just make sur
 A: Try <a href="https://www.w3schools.com/html/" target="_blank">W3Schools</a> or <a href="https://developer.mozilla.org/en-US/docs/Web/HTML" target="_blank">MDN</a>. Or just view source on websites you like and copy what they do!</p>
 
 <p><strong>Q: Any simple examples?</strong><br>
-A: Sure! Here's a basic page:<br>
-<code>&lt;!DOCTYPE html&gt;<br>
-&lt;html&gt;<br>
-&lt;body&gt;<br>
-&lt;h1&gt;Hello World!&lt;/h1&gt;<br>
-&lt;p&gt;This is my page.&lt;/p&gt;<br>
-&lt;/body&gt;<br>
-&lt;/html&gt;</code></p>
+A: Sure! Here's a basic page:</p>
+<pre><span class="tag">&lt;!DOCTYPE html&gt;</span>
+<span class="tag">&lt;html&gt;</span>
+<span class="tag">&lt;body&gt;</span>
+<span class="tag">&lt;h1&gt;</span><span class="text">Hello World!</span><span class="tag">&lt;/h1&gt;</span>
+<span class="tag">&lt;p&gt;</span><span class="text">This is my page.</span><span class="tag">&lt;/p&gt;</span>
+<span class="tag">&lt;/body&gt;</span>
+<span class="tag">&lt;/html&gt;</span></pre>
 </div>
 
 <hr>
