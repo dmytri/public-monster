@@ -11,9 +11,9 @@
   <line x1="100" y1="550" x2="1100" y2="550" stroke="#808080" stroke-width="4"/>
   
   <!-- BETA badge -->
-  <g transform="translate(1020, 60) rotate(15)">
-    <rect x="0" y="0" width="120" height="50" fill="#ffff00" stroke="#ff0000" stroke-width="3"/>
-    <text x="60" y="35" font-family="Comic Sans MS, cursive" font-size="28" fill="#ff0000" text-anchor="middle" font-weight="normal">BETA</text>
+  <g transform="translate(1000, 40) rotate(15)">
+    <rect x="0" y="0" width="140" height="60" fill="#ffff00" stroke="#ff0000" stroke-width="4"/>
+    <text x="70" y="40" font-family="Comic Sans MS, cursive" font-size="36" fill="#ff0000" text-anchor="middle" font-weight="lighter">BETA</text>
   </g>
   
   <!-- Main title with shadow -->
@@ -25,7 +25,7 @@
   </text>
   
   <!-- Blinking tagline -->
-  <text x="600" y="270" font-family="Comic Sans MS, cursive" font-size="36" fill="#000000" text-anchor="middle">
+  <text x="600" y="270" font-family="Comic Sans MS, cursive" font-size="60" fill="#000000" text-anchor="middle">
     ⚡ Your personal corner of the web! ⚡
   </text>
   
@@ -34,7 +34,7 @@
   <text x="390" y="345" font-family="Arial Black, sans-serif" font-size="32" fill="#000000" text-anchor="middle" font-weight="bold">Upload Your Site</text>
 
   <!-- URL -->
-  <text x="600" y="470" font-family="Arial Black, sans-serif" font-size="36" fill="#000000" text-anchor="middle" text-decoration="underline">
+  <text x="600" y="420" font-family="Arial Black, sans-serif" font-size="36" fill="#000000" text-anchor="middle" text-decoration="underline" font-weight="bold">
     http://public.monster/~you
   </text>
   
