@@ -34,8 +34,7 @@
   <text x="390" y="345" font-family="Arial Black, sans-serif" font-size="32" fill="#000000" text-anchor="middle" font-weight="bold">Upload Your Site</text>
 
   <!-- URL -->
-  <!-- add underline AI! -->
-  <text x="600" y="470" font-family="Arial Black, sans-serif" font-size="36" fill="#000000" text-anchor="middle">
+  <text x="600" y="470" font-family="Arial Black, sans-serif" font-size="36" fill="#000000" text-anchor="middle" text-decoration="underline">
     http://public.monster/~you
   </text>
   
