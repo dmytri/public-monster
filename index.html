@@ -72,14 +72,14 @@ if (token) {
 <style>
 body{background:#008080;color:#000;font-family:"Comic Sans MS",cursive;margin:20px}
 main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto;position:relative}
-h1{color:#ff00ff;font-family:Impact,Arial Black,sans-serif;text-shadow:3px 3px 0 #000,5px 5px 10px rgba(0,0,0,0.5);font-size:2em;margin:0;letter-spacing:1px}
+h1{color:#ff00ff;font-family:Impact,Arial Black,sans-serif;text-shadow:3px 3px 0 #000,5px 5px 10px rgba(0,0,0,0.5);font-size:2.5em;margin:0;letter-spacing:1px}
 h2{color:#000;background:#ff0;padding:5px 10px;display:inline-block}
 form{background:#fff;border:2px inset #999;padding:15px;margin:20px 0}
 input,button{font-family:inherit;font-size:1em;margin:5px}
 button{background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer}
 button:active{border-style:inset}
 a{color:#00f;text-decoration:underline}
-.blink{animation:blink 1s infinite}
+.blink{font-size:2em;animation:blink 1s infinite}
 @keyframes blink{50%{opacity:0}}
 #auth{display:block}
 #upload{display:none}
@@ -101,12 +101,12 @@ a{color:#00f;text-decoration:underline}
 <h2>Upload Your Site</h2>
 <form id="uploadForm" aria-label="Upload files">
 <label for="files">Files: <input id="files" type="file" multiple></label><br>
-<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label><br>
-<p style="font-size:0.9em;color:#c00;margin:10px 0"><strong>⚠️</strong> You must upload an <code>index.html</code> in the root (not in a subfolder)!</p>
+<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label>
+<p>⚠️ <strong>Important: index.html</strong> must be in the root, NOT in a subfolder! <strong>Read this!</strong>: <a href="/faq">FAQ</a></p>
 <button type="submit" id="btn">🚀 Upload</button>
 <p id="status"></p>
 </form>
-<p>Your site: <a href="#" id="link"></a></p>
+<p><strong>Your site:</strong> <a href="#" id="link"></a></p>
 </div>
 <script>
 const form = document.getElementById('uploadForm');
