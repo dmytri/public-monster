@@ -59,8 +59,8 @@ if (token) {
 }
 </script>
 <style>
-body{background:#008080;color:#000;font-family:"Comic Sans MS",cursive;margin:20px;position:relative}
-main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto}
+body{background:#008080;color:#000;font-family:"Comic Sans MS",cursive;margin:20px}
+main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto;position:relative}
 h1{color:#ff00ff;font-family:Impact,Arial Black,sans-serif;text-shadow:3px 3px 0 #000,5px 5px 10px rgba(0,0,0,0.5);font-size:2em;margin:0;letter-spacing:1px}
 h2{color:#000;background:#ff0;padding:5px 10px;display:inline-block}
 form{background:#fff;border:2px inset #999;padding:15px;margin:20px 0}
@@ -72,14 +72,14 @@ a{color:#00f;text-decoration:underline}
 @keyframes blink{50%{opacity:0}}
 #auth{display:block}
 #upload{display:none}
-.beta-badge{position:fixed;top:20px;right:20px;background:#ff0;color:#f00;font-weight:bold;font-size:1.5em;padding:8px 16px;border:3px solid #f00;transform:rotate(15deg);box-shadow:3px 3px 0 #000;z-index:1000}
+.beta-badge{position:absolute;top:-10px;right:-10px;background:#ff0;color:#f00;font-weight:bold;font-size:1.5em;padding:8px 16px;border:3px solid #f00;transform:rotate(15deg);box-shadow:3px 3px 0 #000;z-index:1000}
 .construction{text-align:center;margin:20px 0;font-size:1em;background:#ff69b4;color:#000;padding:10px;font-weight:bold}
 @media(max-width:600px){h1{font-size:1.5em}h2{font-size:1.2em}.beta-badge{font-size:1.2em;padding:6px 12px}}
 </style>
 </head>
 <body>
-<div class="beta-badge">BETA</div>
 <main role="main">
+<div class="beta-badge">BETA</div>
 <h1>🌐 Welcome to public.monster! 🌐</h1>
 <p class="blink">⚡ Your personal corner of the web! ⚡</p>
 <div id="auth">
