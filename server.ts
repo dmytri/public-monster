@@ -1,4 +1,6 @@
-import { serve } from "bun";
+/// <reference types="bun-types" />
+/* global Bun, process */
+
 import { jwtVerify, createRemoteJWKSet } from "jose";
 
 const HANKO_API_URL = process.env.HANKO_API_URL;
@@ -64,7 +66,7 @@ async function uploadToBunny(targetPath: string, blob: Blob) {
   if (!res.ok) throw new Error("Upload failed");
 }
 
-serve({
+Bun.serve({
   port: 3000,
   routes: {
     "/~*": req => {
