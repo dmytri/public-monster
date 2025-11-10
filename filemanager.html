@@ -20,6 +20,19 @@ const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
 
 let username = null;
 
+// Listen for session changes and reload page
+hanko.onSessionCreated(() => {
+  window.location.reload();
+});
+
+hanko.onSessionExpired(() => {
+  window.location.href = '/';
+});
+
+hanko.onUserDeleted(() => {
+  window.location.href = '/';
+});
+
 const token = await hanko.getSessionToken();
 if (!token) {
   window.location.href = '/';
