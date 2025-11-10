@@ -214,10 +214,16 @@ async function downloadAllAsZip(files, token) {
     const file = files[i];
     progressDiv.textContent = `Downloading ${i + 1} of ${files.length} files...`;
     
-    const res = await fetch(`/~${username}/${file.ObjectName}`);
-    if (res.ok) {
-      const blob = await res.blob();
-      zip.file(file.ObjectName, blob);
+    try {
+      const res = await fetch(`/~${username}/${file.ObjectName}`);
+      if (res.ok) {
+        const arrayBuffer = await res.arrayBuffer();
+        zip.file(file.ObjectName, arrayBuffer);
+      } else {
+        console.error(`Failed to fetch ${file.ObjectName}`);
+      }
+    } catch (err) {
+      console.error(`Error downloading ${file.ObjectName}:`, err);
     }
   }
   
