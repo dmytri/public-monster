@@ -92,7 +92,7 @@ function renderNode(name, node, prefix, isLast, token) {
     
     const link = document.createElement('a');
     link.href = `/~${username}/${node.path}`;
-    link.target = '_blank';
+    link.download = name;
     link.textContent = name;
     link.style.color = '#00f';
     
