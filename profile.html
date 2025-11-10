@@ -85,6 +85,7 @@ function renderNode(name, node, prefix, isLast, token) {
   if (node.type === 'file') {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
+    line.style.lineHeight = '1.8';
     
     const prefixSpan = document.createElement('span');
     prefixSpan.textContent = prefix + connector;
@@ -112,11 +113,16 @@ function renderNode(name, node, prefix, isLast, token) {
   } else {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
+    line.style.lineHeight = '1.8';
     line.textContent = prefix + connector + name + '/';
     line.style.color = '#000';
     lines.push(line);
     
-    const children = Object.entries(node.children);
+    const children = Object.entries(node.children).sort((a, b) => {
+      if (a[1].type === 'dir' && b[1].type !== 'dir') return -1;
+      if (a[1].type !== 'dir' && b[1].type === 'dir') return 1;
+      return a[0].localeCompare(b[0]);
+    });
     children.forEach(([childName, childNode], idx) => {
       const childIsLast = idx === children.length - 1;
       const childLines = renderNode(childName, childNode, prefix + extension, childIsLast, token);
@@ -144,7 +150,11 @@ function renderTree(files, token) {
   header.textContent = `~${username}/`;
   pre.appendChild(header);
   
-  const entries = Object.entries(tree);
+  const entries = Object.entries(tree).sort((a, b) => {
+    if (a[1].type === 'dir' && b[1].type !== 'dir') return -1;
+    if (a[1].type !== 'dir' && b[1].type === 'dir') return 1;
+    return a[0].localeCompare(b[0]);
+  });
   entries.forEach(([name, node], idx) => {
     const isLast = idx === entries.length - 1;
     const lines = renderNode(name, node, '', isLast, token);
