@@ -194,48 +194,24 @@ function renderTree(files, token) {
 }
 
 async function downloadAllAsZip(files, token) {
-  const progressDiv = document.createElement('div');
-  progressDiv.style.position = 'fixed';
-  progressDiv.style.top = '50%';
-  progressDiv.style.left = '50%';
-  progressDiv.style.transform = 'translate(-50%, -50%)';
-  progressDiv.style.background = '#c0c0c0';
-  progressDiv.style.border = '4px outset #fff';
-  progressDiv.style.padding = '20px';
-  progressDiv.style.zIndex = '10000';
-  progressDiv.style.minWidth = '300px';
-  progressDiv.textContent = `Downloading 0 of ${files.length} files...`;
-  document.body.appendChild(progressDiv);
-  
-  const JSZip = (await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm')).default;
-  const zip = new JSZip();
-  
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    progressDiv.textContent = `Downloading ${i + 1} of ${files.length} files...`;
-    
-    try {
-      const res = await fetch(`/~${username}/${file.ObjectName}`);
-      if (res.ok) {
-        const arrayBuffer = await res.arrayBuffer();
-        zip.file(file.ObjectName, arrayBuffer);
-      } else {
-        console.error(`Failed to fetch ${file.ObjectName}`);
-      }
-    } catch (err) {
-      console.error(`Error downloading ${file.ObjectName}:`, err);
-    }
-  }
-  
-  progressDiv.textContent = 'Creating zip file...';
-  const zipBlob = await zip.generateAsync({ type: 'blob' });
-  
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(zipBlob);
+  link.href = '/api/download-zip';
   link.download = `${username}.zip`;
-  link.click();
   
-  document.body.removeChild(progressDiv);
+  // Add auth token as we can't set headers on <a> download
+  const res = await fetch('/api/download-zip', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  } else {
+    alert('Failed to download zip');
+  }
 }
 
 async function deleteDirectory(name, node, token) {

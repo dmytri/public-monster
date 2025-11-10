@@ -188,6 +188,90 @@ Bun.serve({
         }
       }
     },
+    "/api/download-zip": {
+      GET: async req => {
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
+        
+        let username: string;
+        try {
+          const { payload } = await jwtVerify(token, JWKS);
+          username = payload.username as string;
+        } catch {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
+          return new Response("Storage not configured", { status: 500 });
+        }
+
+        async function listFilesRecursive(path: string): Promise<any[]> {
+          const url = `${BUNNY_STORAGE_URL}${path}`;
+          const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
+          if (!res.ok) return [];
+          
+          const items = await res.json();
+          let allFiles: any[] = [];
+          
+          for (const item of items) {
+            if (item.IsDirectory) {
+              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`);
+              allFiles = allFiles.concat(subFiles);
+            } else {
+              allFiles.push({
+                ObjectName: path.replace(`/~${username}/`, '') + item.ObjectName,
+                path: `${path}${item.ObjectName}`
+              });
+            }
+          }
+          
+          return allFiles;
+        }
+
+        try {
+          const files = await listFilesRecursive(`/~${username}/`);
+          
+          // Use Bun's built-in zip functionality
+          const { spawn } = Bun;
+          const proc = spawn(["sh", "-c", `cd /tmp && mkdir -p ${username} && cd ${username} && rm -rf * && mkdir -p \$(dirname "$1") 2>/dev/null || true`]);
+          await proc.exited;
+          
+          // Download all files to temp directory
+          for (const file of files) {
+            const res = await fetch(`${BUNNY_STORAGE_URL}${file.path}`, { headers: { AccessKey: BUNNY_API_KEY } });
+            if (res.ok) {
+              const data = await res.arrayBuffer();
+              const filePath = `/tmp/${username}/${file.ObjectName}`;
+              const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+              await Bun.write(`/tmp/mkdir_${username}.sh`, `mkdir -p "${dir}"`);
+              const mkdirProc = spawn(["sh", `/tmp/mkdir_${username}.sh`]);
+              await mkdirProc.exited;
+              await Bun.write(filePath, data);
+            }
+          }
+          
+          // Create zip
+          const zipProc = spawn(["sh", "-c", `cd /tmp && zip -r ${username}.zip ${username}`]);
+          await zipProc.exited;
+          
+          const zipFile = Bun.file(`/tmp/${username}.zip`);
+          const zipData = await zipFile.arrayBuffer();
+          
+          // Cleanup
+          spawn(["sh", "-c", `rm -rf /tmp/${username} /tmp/${username}.zip /tmp/mkdir_${username}.sh`]);
+          
+          return new Response(zipData, {
+            headers: {
+              "Content-Type": "application/zip",
+              "Content-Disposition": `attachment; filename="${username}.zip"`
+            }
+          });
+        } catch (err) {
+          console.error(err);
+          return new Response("Failed to create zip", { status: 500 });
+        }
+      }
+    },
     "/social-card.png": () => {
       const file = Bun.file("social-card.png");
       return new Response(file, { headers: { "Content-Type": "image/png" } });
