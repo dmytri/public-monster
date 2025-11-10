@@ -62,6 +62,7 @@ async function uploadToBunny(targetPath: string, blob: Blob) {
 
 console.log('~ public.monster')
 Bun.serve({
+  hostname: '0.0.0.0',
   port: 3000,
   routes: {
     "/~*": req => {
@@ -70,6 +71,64 @@ Bun.serve({
       console.log(BUNNY_PULL_ZONE, `${url.protocol}${url.hostname}`)
       if (BUNNY_PULL_ZONE !== `${url.protocol}${url.hostname}`) {
         return Response.redirect(cdnUrl, 303);
+      }
+    },
+    "/api/files": {
+      GET: async req => {
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
+        
+        let username: string;
+        try {
+          const { payload } = await jwtVerify(token, JWKS);
+          username = payload.username as string;
+        } catch {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
+          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
+        }
+
+        try {
+          const url = `${BUNNY_STORAGE_URL}/~${username}/`;
+          const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
+          if (!res.ok) return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
+          
+          const files = await res.json();
+          return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json" } });
+        } catch {
+          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
+        }
+      },
+      DELETE: async req => {
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
+        
+        let username: string;
+        try {
+          const { payload } = await jwtVerify(token, JWKS);
+          username = payload.username as string;
+        } catch {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        const body = await req.json();
+        const path = body.path;
+        if (!path) return new Response("Bad request", { status: 400 });
+
+        if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
+          return new Response("Storage not configured", { status: 500 });
+        }
+
+        try {
+          const url = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
+          const res = await fetch(url, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
+          if (!res.ok) return new Response("Delete failed", { status: 500 });
+          return new Response("OK");
+        } catch {
+          return new Response("Delete failed", { status: 500 });
+        }
       }
     },
     "/upload": {
@@ -122,6 +181,11 @@ Bun.serve({
     "/faq": () => {
       const file = Bun.file("faq.html");
       return new Response(file, { headers: { "Content-Type": "text/html" } });
+    },
+    "/profile": async () => {
+      const html = await Bun.file("profile.html").text();
+      const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
+      return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
     },
     "/": async req => {
       const html = await Bun.file("index.html").text();

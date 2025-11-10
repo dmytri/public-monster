@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
+<title>Profile - public.monster</title>
+<script type="module">
+import { register } from "https://esm.run/@teamhanko/hanko-elements";
+
+const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
+
+let username = null;
+
+const token = await hanko.getSessionToken();
+if (!token) {
+  window.location.href = '/';
+} else {
+  const user = await hanko.getUser();
+  username = user.username;
+  document.getElementById('username').textContent = username;
+  loadFiles(token);
+}
+
+async function loadFiles(token) {
+  const res = await fetch('/api/files', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  
+  if (!res.ok) {
+    document.getElementById('tree').textContent = 'Failed to load files';
+    return;
+  }
+  
+  const files = await res.json();
+  renderTree(files, token);
+}
+
+function formatSize(bytes) {
+  if (bytes === 0) return '[0B]';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return '[' + (bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1) + sizes[i] + ']';
+}
+
+function buildTree(files) {
+  const tree = {};
+  
+  files.forEach(file => {
+    if (file.IsDirectory) {
+      tree[file.ObjectName] = { type: 'dir', children: {} };
+    } else {
+      tree[file.ObjectName] = { 
+        type: 'file', 
+        size: file.Length,
+        modified: file.LastChanged 
+      };
+    }
+  });
+  
+  return tree;
+}
+
+function renderTree(files, token) {
+  const treeEl = document.getElementById('tree');
+  treeEl.innerHTML = '';
+  
+  if (files.length === 0) {
+    treeEl.textContent = 'No files uploaded yet. Go to the upload page to add files!';
+    return;
+  }
+  
+  const tree = buildTree(files);
+  const pre = document.createElement('pre');
+  pre.textContent = `~${username}/\n`;
+  
+  const entries = Object.entries(tree);
+  entries.forEach(([name, data], idx) => {
+    const isLast = idx === entries.length - 1;
+    const prefix = isLast ? '└── ' : '├── ';
+    
+    const line = document.createElement('div');
+    line.style.fontFamily = 'monospace';
+    
+    if (data.type === 'file') {
+      const size = document.createElement('span');
+      size.textContent = formatSize(data.size) + ' ';
+      size.style.color = '#666';
+      
+      const link = document.createElement('a');
+      link.href = `/~${username}/${name}`;
+      link.target = '_blank';
+      link.textContent = prefix + name;
+      link.style.color = '#00f';
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.style.marginLeft = '10px';
+      deleteBtn.onclick = () => deleteFile(name, token);
+      
+      line.appendChild(size);
+      line.appendChild(link);
+      line.appendChild(deleteBtn);
+    } else {
+      line.textContent = prefix + name + '/';
+      line.style.color = '#000';
+    }
+    
+    pre.appendChild(line);
+  });
+  
+  treeEl.appendChild(pre);
+}
+
+async function deleteFile(path, token) {
+  if (!confirm(`Delete ${path}?`)) return;
+  
+  const res = await fetch('/api/files', {
+    method: 'DELETE',
+    headers: { 
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ path })
+  });
+  
+  if (res.ok) {
+    loadFiles(token);
+  } else {
+    alert('Delete failed');
+  }
+}
+</script>
+<style>
+body{background:#008080;color:#000;font-family:"Comic Neue","Comic Sans MS",cursive;margin:20px}
+main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto;position:relative}
+h1{color:#ff00ff;font-family:Anton,Impact,"Arial Black",sans-serif;text-shadow:3px 3px 0 #000,5px 5px 10px rgba(0,0,0,0.5);font-size:2.5em;margin:0;letter-spacing:1px}
+h2{color:#000;background:#ff0;padding:5px 10px;display:inline-block}
+a{color:#00f;text-decoration:underline}
+button{background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer;font-family:inherit;font-size:1em;margin:5px}
+button:active{border-style:inset}
+#tree{background:#fff;border:2px inset #999;padding:15px;margin:20px 0;max-height:500px;overflow-y:auto;font-family:monospace}
+pre{margin:0;font-family:monospace}
+.beta-badge{position:absolute;top:-10px;right:-10px;background:#ff0;color:#f00;font-weight:bold;font-size:1.5em;padding:8px 16px;border:3px solid #f00;transform:rotate(15deg);box-shadow:3px 3px 0 #000;z-index:1000}
+@media(max-width:600px){h1{font-size:1.5em}h2{font-size:1.2em}.beta-badge{font-size:1.2em;padding:6px 12px}}
+</style>
+</head>
+<body>
+<main role="main">
+<div class="beta-badge">BETA</div>
+<h1>🌐 Profile 🌐</h1>
+<h2>~<span id="username"></span></h2>
+<div id="tree">Loading...</div>
+<p><a href="/">← Back to Upload</a></p>
+<footer style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px groove #999;font-size:0.9em">
+by <a href="/~dmytri" rel="noopener">~dmytri</a> &nbsp;|&nbsp; <a href="/about">about</a> &nbsp;|&nbsp; <a href="/faq">faq</a>
+</footer>
+</main>
+</body>
+</html>
