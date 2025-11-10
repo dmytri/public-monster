@@ -85,7 +85,7 @@ function renderNode(name, node, prefix, isLast, token) {
   if (node.type === 'file') {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
-    line.style.lineHeight = '1.5';
+    line.style.lineHeight = '1.4';
     
     const prefixSpan = document.createElement('span');
     prefixSpan.textContent = prefix + connector;
@@ -114,8 +114,8 @@ function renderNode(name, node, prefix, isLast, token) {
   } else {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
-    line.style.lineHeight = '1.5';
-    line.textContent = prefix + connector + name + '/';
+    line.style.lineHeight = '1.4';
+    line.textContent = prefix + connector + '📂 ' + name + '/';
     line.style.color = '#000';
     lines.push(line);
     
