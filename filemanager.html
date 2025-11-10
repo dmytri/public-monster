@@ -165,7 +165,18 @@ function renderTree(files, token) {
   
   const header = document.createElement('div');
   header.style.fontFamily = 'monospace';
-  header.textContent = `~${username}/`;
+  
+  const headerText = document.createElement('span');
+  headerText.textContent = `~${username}/`;
+  
+  const downloadBtn = document.createElement('span');
+  downloadBtn.textContent = ' 📥';
+  downloadBtn.style.cursor = 'pointer';
+  downloadBtn.title = 'Download all files as zip';
+  downloadBtn.onclick = () => downloadAllAsZip(files, token);
+  
+  header.appendChild(headerText);
+  header.appendChild(downloadBtn);
   pre.appendChild(header);
   
   const entries = Object.entries(tree).sort((a, b) => {
@@ -180,6 +191,45 @@ function renderTree(files, token) {
   });
   
   treeEl.appendChild(pre);
+}
+
+async function downloadAllAsZip(files, token) {
+  const progressDiv = document.createElement('div');
+  progressDiv.style.position = 'fixed';
+  progressDiv.style.top = '50%';
+  progressDiv.style.left = '50%';
+  progressDiv.style.transform = 'translate(-50%, -50%)';
+  progressDiv.style.background = '#c0c0c0';
+  progressDiv.style.border = '4px outset #fff';
+  progressDiv.style.padding = '20px';
+  progressDiv.style.zIndex = '10000';
+  progressDiv.style.minWidth = '300px';
+  progressDiv.textContent = `Downloading 0 of ${files.length} files...`;
+  document.body.appendChild(progressDiv);
+  
+  const JSZip = (await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm')).default;
+  const zip = new JSZip();
+  
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    progressDiv.textContent = `Downloading ${i + 1} of ${files.length} files...`;
+    
+    const res = await fetch(`/~${username}/${file.ObjectName}`);
+    if (res.ok) {
+      const blob = await res.blob();
+      zip.file(file.ObjectName, blob);
+    }
+  }
+  
+  progressDiv.textContent = 'Creating zip file...';
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(zipBlob);
+  link.download = `${username}.zip`;
+  link.click();
+  
+  document.body.removeChild(progressDiv);
 }
 
 async function deleteDirectory(name, node, token) {
