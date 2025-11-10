@@ -200,8 +200,8 @@ Bun.serve({
       const file = Bun.file("faq.html");
       return new Response(file, { headers: { "Content-Type": "text/html" } });
     },
-    "/profile": async () => {
-      const html = await Bun.file("profile.html").text();
+    "/filemanager": async () => {
+      const html = await Bun.file("filemanager.html").text();
       const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
       return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
     },
