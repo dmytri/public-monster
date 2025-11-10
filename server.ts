@@ -105,7 +105,7 @@ Bun.serve({
         }
 
         try {
-          await uploadToBunny('~' + username + '/' + path, file);
+          await uploadToBunny('/~' + username + '/' + path, file);
           return new Response("OK");
         } catch (err) {
           return new Response("Upload failed", { status: 500 });
