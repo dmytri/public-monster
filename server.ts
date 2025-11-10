@@ -127,7 +127,7 @@ Bun.serve({
           return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
         }
 
-        async function listFilesRecursive(path: string): Promise<any[]> {
+        async function listFilesRecursive(path: string, user: string): Promise<any[]> {
           const url = `${BUNNY_STORAGE_URL}${path}`;
           const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
           if (!res.ok) return [];
@@ -137,11 +137,11 @@ Bun.serve({
           
           for (const item of items) {
             if (item.IsDirectory) {
-              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`);
+              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`, user);
               allFiles = allFiles.concat(subFiles);
             } else {
               allFiles.push({
-                ObjectName: path.replace(`/~${username}/`, '') + item.ObjectName,
+                ObjectName: path.replace(`/~${user}/`, '') + item.ObjectName,
                 Length: item.Length,
                 IsDirectory: false
               });
@@ -152,7 +152,7 @@ Bun.serve({
         }
 
         try {
-          const files = await listFilesRecursive(`/~${username}/`);
+          const files = await listFilesRecursive(`/~${username}/`, username);
           return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json" } });
         } catch {
           return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
@@ -205,7 +205,7 @@ Bun.serve({
           return new Response("Storage not configured", { status: 500 });
         }
 
-        async function listFilesRecursive(path: string): Promise<any[]> {
+        async function listFilesRecursive(path: string, user: string): Promise<any[]> {
           const url = `${BUNNY_STORAGE_URL}${path}`;
           const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
           if (!res.ok) return [];
@@ -215,11 +215,11 @@ Bun.serve({
           
           for (const item of items) {
             if (item.IsDirectory) {
-              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`);
+              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`, user);
               allFiles = allFiles.concat(subFiles);
             } else {
               allFiles.push({
-                ObjectName: path.replace(`/~${username}/`, '') + item.ObjectName,
+                ObjectName: path.replace(`/~${user}/`, '') + item.ObjectName,
                 path: `${path}${item.ObjectName}`
               });
             }
@@ -229,7 +229,7 @@ Bun.serve({
         }
 
         try {
-          const files = await listFilesRecursive(`/~${username}/`);
+          const files = await listFilesRecursive(`/~${username}/`, username);
           
           // Use Bun's built-in zip functionality
           const { spawn } = Bun;
