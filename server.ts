@@ -90,12 +90,32 @@ Bun.serve({
           return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
         }
 
-        try {
-          const url = `${BUNNY_STORAGE_URL}/~${username}/`;
+        async function listFilesRecursive(path: string): Promise<any[]> {
+          const url = `${BUNNY_STORAGE_URL}${path}`;
           const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
-          if (!res.ok) return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
+          if (!res.ok) return [];
           
-          const files = await res.json();
+          const items = await res.json();
+          let allFiles: any[] = [];
+          
+          for (const item of items) {
+            if (item.IsDirectory) {
+              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`);
+              allFiles = allFiles.concat(subFiles);
+            } else {
+              allFiles.push({
+                ObjectName: path.replace(`/~${username}/`, '') + item.ObjectName,
+                Length: item.Length,
+                IsDirectory: false
+              });
+            }
+          }
+          
+          return allFiles;
+        }
+
+        try {
+          const files = await listFilesRecursive(`/~${username}/`);
           return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json" } });
         } catch {
           return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
