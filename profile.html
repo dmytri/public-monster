@@ -115,7 +115,18 @@ function renderNode(name, node, prefix, isLast, token) {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
     line.style.lineHeight = '1.4';
-    line.textContent = prefix + connector + '📂 ' + name + '/';
+    
+    const prefixSpan = document.createElement('span');
+    prefixSpan.textContent = prefix + connector + '📂 ' + name + '/';
+    
+    const deleteBtn = document.createElement('span');
+    deleteBtn.textContent = ' 🗑️';
+    deleteBtn.style.cursor = 'pointer';
+    deleteBtn.style.fontSize = '0.9em';
+    deleteBtn.onclick = () => deleteDirectory(name, node, token);
+    
+    line.appendChild(prefixSpan);
+    line.appendChild(deleteBtn);
     line.style.color = '#000';
     lines.push(line);
     
@@ -163,6 +174,44 @@ function renderTree(files, token) {
   });
   
   treeEl.appendChild(pre);
+}
+
+async function deleteDirectory(name, node, token) {
+  const userInput = prompt(`Type the directory name "${name}" to confirm deletion:`);
+  if (userInput !== name) {
+    if (userInput !== null) alert('Directory name does not match. Deletion cancelled.');
+    return;
+  }
+  
+  // Collect all file paths in this directory
+  const filesToDelete = [];
+  function collectFiles(n) {
+    if (n.type === 'file') {
+      filesToDelete.push(n.path);
+    } else {
+      Object.values(n.children).forEach(collectFiles);
+    }
+  }
+  collectFiles(node);
+  
+  // Delete all files
+  for (const path of filesToDelete) {
+    const res = await fetch('/api/files', {
+      method: 'DELETE',
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ path })
+    });
+    
+    if (!res.ok) {
+      alert(`Failed to delete ${path}`);
+      return;
+    }
+  }
+  
+  loadFiles(token);
 }
 
 async function deleteFile(path, token) {
