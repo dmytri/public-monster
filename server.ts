@@ -40,7 +40,6 @@ const ALLOWED_EXTENSIONS = [
   '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
   '.ini', '.conf', '.properties', '.env',
 
-
   // feeds
   '.rss', '.atom', '.rdf',
 
@@ -52,7 +51,6 @@ const ALLOWED_EXTENSIONS = [
 
   // manifests / maps
   '.webmanifest', '.map'
-
 ];
 
 async function uploadToBunny(targetPath: string, blob: Blob) {
@@ -62,12 +60,14 @@ async function uploadToBunny(targetPath: string, blob: Blob) {
   if (!res.ok) throw new Error("Upload failed");
 }
 
+console.log('~ public.monster')
 Bun.serve({
   port: 3000,
   routes: {
     "/~*": req => {
       const url = new URL(req.url);
       const cdnUrl = `${BUNNY_PULL_ZONE}/${url.pathname}`;
+      console.log(BUNNY_PULL_ZONE, `${url.protocol}${url.hostname}`)
       if (BUNNY_PULL_ZONE !== `${url.protocol}${url.hostname}`) {
         return Response.redirect(cdnUrl, 303);
       }
