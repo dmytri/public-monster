@@ -104,7 +104,8 @@ a{color:#00f;text-decoration:underline}
 <h2>Upload Your Site</h2>
 <form id="uploadForm" aria-label="Upload files">
 <label for="files">Files: <input id="files" type="file" multiple></label><br>
-<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label>
+<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label><br>
+<label for="flattenFolder"><input id="flattenFolder" type="checkbox"> Upload folder contents to root (strip folder name)</label>
 <p>⚠️ <strong>Important: index.html</strong> must be in the root, NOT in a subfolder! <strong>Read this!</strong>: <a href="/faq">FAQ</a></p>
 <button type="submit" id="btn">🚀 Upload</button>
 <p id="status"></p>
@@ -129,13 +130,26 @@ form.addEventListener('submit', async (e) => {
   
   status.textContent = `⏳ Uploading ${files.length} file(s)...`;
   
+  const flattenFolder = document.getElementById('flattenFolder').checked;
+  
   let count = 0;
   for (const file of files) {
     count++;
     status.textContent = `⏳ Uploading ${count}/${files.length}: ${file.name}...`;
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('path', file.webkitRelativePath || file.name);
+    
+    let path = file.webkitRelativePath || file.name;
+    
+    // If flatten is checked and this is a folder upload, strip the first folder name
+    if (flattenFolder && file.webkitRelativePath) {
+      const parts = file.webkitRelativePath.split('/');
+      if (parts.length > 1) {
+        path = parts.slice(1).join('/');
+      }
+    }
+    
+    formData.append('path', path);
     
     try {
       const headers = {};
