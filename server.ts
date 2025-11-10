@@ -53,11 +53,9 @@ const ALLOWED_EXTENSIONS = [
   '.webmanifest', '.map'
 ];
 
-async function uploadToBunny(targetPath: string, blob: Blob) {
-  if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) throw new Error("Bunny Storage not configured");
-  const url = BUNNY_STORAGE_URL + '/' + encodeURI(targetPath);
-  const res = await fetch(url, { method:"PUT", headers:{ AccessKey:BUNNY_API_KEY }, body:blob });
-  if (!res.ok) throw new Error("Upload failed");
+async function getUsername(token: string) {
+  const { payload } = await jwtVerify(token, JWKS);
+  return payload.username as string;
 }
 
 console.log('~ public.monster')
@@ -75,16 +73,11 @@ Bun.serve({
     },
     "/api/files": {
       POST: async req => {
-        let username: string | null = null;
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (token && JWKS) {
-          try {
-            const { payload } = await jwtVerify(token, JWKS);
-            username = payload.username as string;
-          } catch {
-            return new Response("Unauthorized", { status: 401 });
-          }
-        } else if (JWKS) {
+        let username: string
+        try {
+          username = await getUsername(token);
+        } catch (err) {
           return new Response("Unauthorized", { status: 401 });
         }
 
@@ -104,6 +97,12 @@ Bun.serve({
           return new Response("File type not allowed", { status: 403 });
         }
 
+        async function uploadToBunny(targetPath: string, blob: Blob) {
+          const url = BUNNY_STORAGE_URL + '/' + encodeURI(targetPath);
+          const res = await fetch(url, { method:"PUT", headers:{ AccessKey:BUNNY_API_KEY }, body:blob });
+          if (!res.ok) throw new Error("Upload failed");
+        }
+
         try {
           await uploadToBunny('/~' + username + '/' + path, file);
           return new Response("OK");
@@ -113,18 +112,11 @@ Bun.serve({
       },
       GET: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
-        
-        let username: string;
+        let username: string
         try {
-          const { payload } = await jwtVerify(token, JWKS);
-          username = payload.username as string;
-        } catch {
+          username = await getUsername(token);
+        } catch (err) {
           return new Response("Unauthorized", { status: 401 });
-        }
-
-        if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
-          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
         }
 
         async function listFilesRecursive(path: string, user: string): Promise<any[]> {
@@ -160,23 +152,16 @@ Bun.serve({
       },
       DELETE: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
-        
-        let username: string;
+        let username: string
         try {
-          const { payload } = await jwtVerify(token, JWKS);
-          username = payload.username as string;
-        } catch {
+          username = await getUsername(token);
+        } catch (err) {
           return new Response("Unauthorized", { status: 401 });
         }
 
         const body = await req.json();
         const path = body.path;
         if (!path) return new Response("Bad request", { status: 400 });
-
-        if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
-          return new Response("Storage not configured", { status: 500 });
-        }
 
         try {
           const url = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
