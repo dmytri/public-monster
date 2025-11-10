@@ -49,18 +49,23 @@ function formatSize(bytes) {
 function buildTree(files) {
   const tree = {};
   
-  files.forEach(file => {
-    const parts = file.ObjectName.split('/');
+  // Filter out directory entries, we'll infer them from file paths
+  const fileEntries = files.filter(f => !f.IsDirectory);
+  
+  fileEntries.forEach(file => {
+    const parts = file.ObjectName.split('/').filter(p => p);
     let current = tree;
     
     parts.forEach((part, idx) => {
-      if (idx === parts.length - 1 && !file.IsDirectory) {
+      if (idx === parts.length - 1) {
+        // This is the file itself
         current[part] = {
           type: 'file',
           size: file.Length,
           path: file.ObjectName
         };
       } else {
+        // This is a directory in the path
         if (!current[part]) {
           current[part] = { type: 'dir', children: {} };
         }
