@@ -85,7 +85,7 @@ function renderNode(name, node, prefix, isLast, token) {
   if (node.type === 'file') {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
-    line.style.lineHeight = '1.8';
+    line.style.lineHeight = '1.5';
     
     const prefixSpan = document.createElement('span');
     prefixSpan.textContent = prefix + connector;
@@ -103,6 +103,7 @@ function renderNode(name, node, prefix, isLast, token) {
     const deleteBtn = document.createElement('span');
     deleteBtn.textContent = ' 🗑️';
     deleteBtn.style.cursor = 'pointer';
+    deleteBtn.style.fontSize = '0.9em';
     deleteBtn.onclick = () => deleteFile(node.path, token);
     
     line.appendChild(prefixSpan);
@@ -113,7 +114,7 @@ function renderNode(name, node, prefix, isLast, token) {
   } else {
     const line = document.createElement('div');
     line.style.fontFamily = 'monospace';
-    line.style.lineHeight = '1.8';
+    line.style.lineHeight = '1.5';
     line.textContent = prefix + connector + name + '/';
     line.style.color = '#000';
     lines.push(line);
