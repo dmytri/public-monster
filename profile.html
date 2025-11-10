@@ -50,18 +50,76 @@ function buildTree(files) {
   const tree = {};
   
   files.forEach(file => {
-    if (file.IsDirectory) {
-      tree[file.ObjectName] = { type: 'dir', children: {} };
-    } else {
-      tree[file.ObjectName] = { 
-        type: 'file', 
-        size: file.Length,
-        modified: file.LastChanged 
-      };
-    }
+    const parts = file.ObjectName.split('/');
+    let current = tree;
+    
+    parts.forEach((part, idx) => {
+      if (idx === parts.length - 1 && !file.IsDirectory) {
+        current[part] = {
+          type: 'file',
+          size: file.Length,
+          path: file.ObjectName
+        };
+      } else {
+        if (!current[part]) {
+          current[part] = { type: 'dir', children: {} };
+        }
+        current = current[part].children;
+      }
+    });
   });
   
   return tree;
+}
+
+function renderNode(name, node, prefix, isLast, token) {
+  const lines = [];
+  const connector = isLast ? '└── ' : '├── ';
+  const extension = isLast ? '    ' : '│   ';
+  
+  if (node.type === 'file') {
+    const line = document.createElement('div');
+    line.style.fontFamily = 'monospace';
+    
+    const size = document.createElement('span');
+    size.textContent = formatSize(node.size) + ' ';
+    size.style.color = '#666';
+    
+    const prefixSpan = document.createElement('span');
+    prefixSpan.textContent = prefix + connector;
+    
+    const link = document.createElement('a');
+    link.href = `/~${username}/${node.path}`;
+    link.target = '_blank';
+    link.textContent = name;
+    link.style.color = '#00f';
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '🗑️';
+    deleteBtn.style.marginLeft = '10px';
+    deleteBtn.onclick = () => deleteFile(node.path, token);
+    
+    line.appendChild(size);
+    line.appendChild(prefixSpan);
+    line.appendChild(link);
+    line.appendChild(deleteBtn);
+    lines.push(line);
+  } else {
+    const line = document.createElement('div');
+    line.style.fontFamily = 'monospace';
+    line.textContent = prefix + connector + name + '/';
+    line.style.color = '#000';
+    lines.push(line);
+    
+    const children = Object.entries(node.children);
+    children.forEach(([childName, childNode], idx) => {
+      const childIsLast = idx === children.length - 1;
+      const childLines = renderNode(childName, childNode, prefix + extension, childIsLast, token);
+      lines.push(...childLines);
+    });
+  }
+  
+  return lines;
 }
 
 function renderTree(files, token) {
@@ -75,41 +133,17 @@ function renderTree(files, token) {
   
   const tree = buildTree(files);
   const pre = document.createElement('pre');
-  pre.textContent = `~${username}/\n`;
+  
+  const header = document.createElement('div');
+  header.style.fontFamily = 'monospace';
+  header.textContent = `~${username}/`;
+  pre.appendChild(header);
   
   const entries = Object.entries(tree);
-  entries.forEach(([name, data], idx) => {
+  entries.forEach(([name, node], idx) => {
     const isLast = idx === entries.length - 1;
-    const prefix = isLast ? '└── ' : '├── ';
-    
-    const line = document.createElement('div');
-    line.style.fontFamily = 'monospace';
-    
-    if (data.type === 'file') {
-      const size = document.createElement('span');
-      size.textContent = formatSize(data.size) + ' ';
-      size.style.color = '#666';
-      
-      const link = document.createElement('a');
-      link.href = `/~${username}/${name}`;
-      link.target = '_blank';
-      link.textContent = prefix + name;
-      link.style.color = '#00f';
-      
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = '🗑️';
-      deleteBtn.style.marginLeft = '10px';
-      deleteBtn.onclick = () => deleteFile(name, token);
-      
-      line.appendChild(size);
-      line.appendChild(link);
-      line.appendChild(deleteBtn);
-    } else {
-      line.textContent = prefix + name + '/';
-      line.style.color = '#000';
-    }
-    
-    pre.appendChild(line);
+    const lines = renderNode(name, node, '', isLast, token);
+    lines.forEach(line => pre.appendChild(line));
   });
   
   treeEl.appendChild(pre);
