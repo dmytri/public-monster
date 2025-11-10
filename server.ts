@@ -74,6 +74,43 @@ Bun.serve({
       }
     },
     "/api/files": {
+      POST: async req => {
+        let username: string | null = null;
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (token && JWKS) {
+          try {
+            const { payload } = await jwtVerify(token, JWKS);
+            username = payload.username as string;
+          } catch {
+            return new Response("Unauthorized", { status: 401 });
+          }
+        } else if (JWKS) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        const form = await req.formData();
+        const file = form.get("file") as File;
+        const path = form.get("path") as string;
+        if (!file || !path) return new Response("Bad request", { status: 400 });
+        
+        // File size check
+        if (file.size > MAX_FILE_SIZE) {
+          return new Response(`File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`, { status: 413 });
+        }
+
+        // File type check
+        const ext = path.toLowerCase().substring(path.lastIndexOf('.'));
+        if (ext ==='' || !ALLOWED_EXTENSIONS.includes(ext)) {
+          return new Response("File type not allowed", { status: 403 });
+        }
+
+        try {
+          await uploadToBunny('~' + username + '/' + path, file);
+          return new Response("OK");
+        } catch (err) {
+          return new Response("Upload failed", { status: 500 });
+        }
+      },
       GET: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
         if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
@@ -148,45 +185,6 @@ Bun.serve({
           return new Response("OK");
         } catch {
           return new Response("Delete failed", { status: 500 });
-        }
-      }
-    },
-    "/upload": {
-      POST: async req => {
-        let username: string | null = null;
-        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (token && JWKS) {
-          try {
-            const { payload } = await jwtVerify(token, JWKS);
-            username = payload.username as string;
-          } catch {
-            return new Response("Unauthorized", { status: 401 });
-          }
-        } else if (JWKS) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-
-        const form = await req.formData();
-        const file = form.get("file") as File;
-        const path = form.get("path") as string;
-        if (!file || !path) return new Response("Bad request", { status: 400 });
-        
-        // File size check
-        if (file.size > MAX_FILE_SIZE) {
-          return new Response(`File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`, { status: 413 });
-        }
-
-        // File type check
-        const ext = path.toLowerCase().substring(path.lastIndexOf('.'));
-        if (ext ==='' || !ALLOWED_EXTENSIONS.includes(ext)) {
-          return new Response("File type not allowed", { status: 403 });
-        }
-
-        try {
-          await uploadToBunny('~' + username + '/' + path, file);
-          return new Response("OK");
-        } catch (err) {
-          return new Response("Upload failed", { status: 500 });
         }
       }
     },

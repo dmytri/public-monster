@@ -110,7 +110,7 @@ a{color:#00f;text-decoration:underline}
 <p id="status"></p>
 </form>
 <p><strong>Your site:</strong> <a href="#" id="link"></a></p>
-<p><a href="/profile">📁 Manage Files</a></p>
+<p><a href="/profile">📁 File Manager</a></p>
 </div>
 <script>
 const form = document.getElementById('uploadForm');
@@ -143,7 +143,7 @@ form.addEventListener('submit', async (e) => {
         headers['Authorization'] = 'Bearer ' + window.hankoToken;
       }
       
-      const res = await fetch('/upload', {
+      const res = await fetch('/api/files', {
         method: 'POST',
         headers: headers,
         body: formData

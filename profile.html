@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.bunny.net">
 <link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
-<title>Profile - public.monster</title>
+<title>File Manager - public.monster</title>
 <script type="module">
 import { register } from "https://esm.run/@teamhanko/hanko-elements";
 
@@ -194,8 +194,25 @@ async function deleteDirectory(name, node, token) {
   }
   collectFiles(node);
   
+  // Create progress indicator
+  const progressDiv = document.createElement('div');
+  progressDiv.style.position = 'fixed';
+  progressDiv.style.top = '50%';
+  progressDiv.style.left = '50%';
+  progressDiv.style.transform = 'translate(-50%, -50%)';
+  progressDiv.style.background = '#c0c0c0';
+  progressDiv.style.border = '4px outset #fff';
+  progressDiv.style.padding = '20px';
+  progressDiv.style.zIndex = '10000';
+  progressDiv.style.minWidth = '300px';
+  progressDiv.textContent = `Deleting 0 of ${filesToDelete.length} files...`;
+  document.body.appendChild(progressDiv);
+  
   // Delete all files
-  for (const path of filesToDelete) {
+  for (let i = 0; i < filesToDelete.length; i++) {
+    const path = filesToDelete[i];
+    progressDiv.textContent = `Deleting ${i + 1} of ${filesToDelete.length} files...`;
+    
     const res = await fetch('/api/files', {
       method: 'DELETE',
       headers: { 
@@ -206,11 +223,13 @@ async function deleteDirectory(name, node, token) {
     });
     
     if (!res.ok) {
+      document.body.removeChild(progressDiv);
       alert(`Failed to delete ${path}`);
       return;
     }
   }
   
+  document.body.removeChild(progressDiv);
   loadFiles(token);
 }
 
@@ -254,7 +273,7 @@ pre{margin:0;font-family:monospace}
 <body>
 <main role="main">
 <div class="beta-badge">BETA</div>
-<h1>🌐 Profile 🌐</h1>
+<h1>🌐 File Manager 🌐</h1>
 <h2>~<span id="username"></span></h2>
 <div id="tree">Loading...</div>
 <p><a href="/">← Back to Upload</a></p>
