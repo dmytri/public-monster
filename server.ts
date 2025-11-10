@@ -13,50 +13,46 @@ const JWKS = HANKO_API_URL ? createRemoteJWKSet(new URL(`${HANKO_API_URL}/.well-
 // Abuse prevention config
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_EXTENSIONS = [
-  // HTML + SSI
+  // source
   '.html', '.htm',
   '.shtml', '.shtm',
-
-  // XHTML (retro)
   '.xhtml', '.xht',
+  '.css', '.js', '.mjs',
+  '.md', '.mdx', '.jsx', '.riot', '.tag',
 
-  // Text / data / source
-  '.txt', '.json', '.xml', '.csv', '.tsv',
-  '.yaml', '.yml',
-  '.ini', '.conf', '.properties', '.env',
-  '.md', '.mdx',
-  '.jsx',
-  '.riot', '.tag',
-
-  // Feeds (retro web)
-  '.rss', '.atom',
-
-  // Documents
-  '.pdf',
-
-  // Manifests / maps
-  '.webmanifest', '.map',
-
-  // JS / CSS
-  '.js', '.mjs',
-  '.css',
-
-  // Fonts
+  // fonts
   '.woff', '.woff2', '.ttf', '.otf',
 
-  // Images
+  // images
   '.png', '.jpg', '.jpeg', '.gif',
   '.webp', '.svg', '.svgz', '.ico',
   '.avif', '.heic', '.heif',
   '.bmp', '.tiff', '.tif',
 
-  // Media
+  // media
   '.mp4', '.webm', '.mp3', '.wav',
-  '.mid', '.midi',
+  '.mid', '.midi', '.ogg', '.ogv',
+  '.mov', '.qt',
 
-  // WASM + 3D
-  '.wasm',
-  '.glb', '.gltf'
+  // 3d
+  '.glb', '.gltf',
+
+  '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
+  '.ini', '.conf', '.properties', '.env',
+
+
+  // feeds
+  '.rss', '.atom', '.rdf',
+
+  // archives
+  '.zip', '.tar', '.tgz', '.gz', '.bz2', '.xz', '.7z',
+
+  // documents
+  '.pdf',
+
+  // manifests / maps
+  '.webmanifest', '.map'
+
 ];
 
 async function uploadToBunny(targetPath: string, blob: Blob) {
@@ -103,7 +99,7 @@ Bun.serve({
 
         // File type check
         const ext = path.toLowerCase().substring(path.lastIndexOf('.'));
-        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        if (ext ==='' || !ALLOWED_EXTENSIONS.includes(ext)) {
           return new Response("File type not allowed", { status: 403 });
         }
 
