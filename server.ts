@@ -145,9 +145,27 @@ Bun.serve({
 
         try {
           const files = await listFilesRecursive(`/~${username}/`, username);
-          return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate" } });
+          const content = JSON.stringify(files);
+          
+          // Generate ETag from content hash
+          const hash = Bun.hash(content);
+          const etag = `"${hash}"`;
+          
+          // Check If-None-Match header for conditional request
+          const ifNoneMatch = req.headers.get("If-None-Match");
+          if (ifNoneMatch === etag) {
+            return new Response(null, { status: 304 });
+          }
+          
+          return new Response(content, { 
+            headers: { 
+              "Content-Type": "application/json",
+              "ETag": etag,
+              "Cache-Control": "private, must-revalidate"
+            } 
+          });
         } catch {
-          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate" } });
+          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
         }
       },
       DELETE: async req => {
