@@ -146,6 +146,11 @@ Bun.serve({
 
         try {
           await uploadToBunny('/~' + username + '/' + path, file);
+          
+          // Update ETag
+          const etagValue = Bun.hash(username + Date.now());
+          await uploadToBunny('/~' + username + '/.etags', new Blob([etagValue.toString()]));
+          
           return new Response("OK");
         } catch (err) {
           return new Response("Upload failed", { status: 500 });
@@ -164,9 +169,13 @@ Bun.serve({
           const files = await listFilesRecursive(`/~${username}/`, username);
           const content = JSON.stringify(files);
           
-          // Generate ETag from content hash
-          const hash = Bun.hash(content);
-          const etag = `"${hash}"`;
+          // Read ETag from .etags file
+          let etag = '"0"';
+          const etagRes = await fetch(`${BUNNY_STORAGE_URL}/~${username}/.etags`, { headers: { AccessKey: BUNNY_API_KEY } });
+          if (etagRes.ok) {
+            const etagValue = await etagRes.text();
+            etag = `"${etagValue}"`;
+          }
           
           // Check If-None-Match header for conditional request
           const ifNoneMatch = req.headers.get("If-None-Match");
@@ -202,6 +211,12 @@ Bun.serve({
           const url = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
           const res = await fetch(url, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
           if (!res.ok) return new Response("Delete failed", { status: 500 });
+          
+          // Update ETag
+          const etagValue = Bun.hash(username + Date.now());
+          const etagUrl = `${BUNNY_STORAGE_URL}/~${username}/.etags`;
+          await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
+          
           return new Response("OK");
         } catch {
           return new Response("Delete failed", { status: 500 });
