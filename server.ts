@@ -243,6 +243,57 @@ Bun.serve({
         }
       }
     },
+    "/api/migrate-username": {
+      POST: async req => {
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        let newUsername: string
+        try {
+          newUsername = await getUsername(token);
+        } catch (err) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        const body = await req.json();
+        const oldUsername = body.oldUsername;
+        if (!oldUsername) return new Response("Bad request", { status: 400 });
+
+        try {
+          // List all files in old directory
+          const files = await listFilesRecursive(`/~${oldUsername}/`, oldUsername);
+          
+          // Copy each file to new location
+          for (const file of files) {
+            const oldPath = file.ObjectName;
+            const newPath = oldPath.replace(`/~${oldUsername}/`, `/~${newUsername}/`);
+            
+            // Download from old location
+            const res = await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
+              headers: { AccessKey: BUNNY_API_KEY }
+            });
+            if (!res.ok) continue;
+            const data = await res.arrayBuffer();
+            
+            // Upload to new location
+            await fetch(`${BUNNY_STORAGE_URL}${newPath}`, {
+              method: "PUT",
+              headers: { AccessKey: BUNNY_API_KEY },
+              body: data
+            });
+            
+            // Delete old file
+            await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
+              method: "DELETE",
+              headers: { AccessKey: BUNNY_API_KEY }
+            });
+          }
+          
+          return new Response("OK");
+        } catch (err) {
+          console.error(err);
+          return new Response("Migration failed", { status: 500 });
+        }
+      }
+    },
     "/social-card.png": () => {
       const file = Bun.file("social-card.png");
       return new Response(file, { headers: { "Content-Type": "image/png" } });

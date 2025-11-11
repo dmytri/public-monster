@@ -34,12 +34,38 @@ hanko.onUserDeleted(() => {
   window.location.href = '/';
 });
 
-// Listen for username changes and warn user
+// Listen for username changes and migrate storage
+const oldUsername = user.username;
 const profileElement = document.querySelector('hanko-profile');
 if (profileElement) {
-  profileElement.addEventListener('onUsernameChanged', (event) => {
-    alert('Username changes are not currently supported. Changing your username would require migrating all your files to a new storage path. Please contact support if you need to change your username.');
-    window.location.reload();
+  profileElement.addEventListener('onUsernameChanged', async (event) => {
+    const newToken = await hanko.getSessionToken();
+    const newUser = await hanko.getUser();
+    const newUsername = newUser.username;
+    
+    if (oldUsername !== newUsername) {
+      const confirmed = confirm(`Migrate all files from ~${oldUsername}/ to ~${newUsername}/?`);
+      if (!confirmed) {
+        alert('Username changed but files not migrated. Your old files are still at ~' + oldUsername + '/');
+        return;
+      }
+      
+      const res = await fetch('/api/migrate-username', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${newToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ oldUsername })
+      });
+      
+      if (res.ok) {
+        alert('Files migrated successfully!');
+        window.location.reload();
+      } else {
+        alert('Migration failed. Your files are still at ~' + oldUsername + '/');
+      }
+    }
   });
 }
 </script>
