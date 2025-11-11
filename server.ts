@@ -145,9 +145,9 @@ Bun.serve({
 
         try {
           const files = await listFilesRecursive(`/~${username}/`, username);
-          return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json" } });
+          return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate" } });
         } catch {
-          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
+          return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate" } });
         }
       },
       DELETE: async req => {
