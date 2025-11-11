@@ -329,7 +329,9 @@ Bun.serve({
             const newPath = oldPath.replace(`~${oldUsername}/`, `~${newUsername}/`);
             
             // Download from old location
-            const downloadRes = await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
+            const downloadUrl = `${BUNNY_STORAGE_URL}${oldPath}`;
+            console.log(`Downloading: ${downloadUrl}`);
+            const downloadRes = await fetch(downloadUrl, {
               headers: { AccessKey: BUNNY_API_KEY }
             });
             if (!downloadRes.ok) {
