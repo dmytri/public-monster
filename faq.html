@@ -149,6 +149,27 @@ A: Totally! Upload any HTML, CSS, JavaScript, images, whatever. We just serve yo
 A: Yes! Upload folders, images, stylesheets, scripts - everything. Just make sure you have an <code>index.html</code> <strong>in the root</strong> as your main page (not inside a subfolder).</p>
 </div>
 
+<div class="box" id="linking">
+<h2>🔗 Linking Files</h2>
+
+<p><strong>Q: Why don't my images/CSS/links work?</strong><br>
+A: You're probably using the wrong path! There are two types of links:</p>
+
+<p><strong>Relative links</strong> (recommended):<br>
+<code>&lt;img src="photo.jpg"&gt;</code> - same folder<br>
+<code>&lt;link href="css/style.css"&gt;</code> - in a subfolder<br>
+<code>&lt;a href="../index.html"&gt;</code> - go up one folder</p>
+
+<p><strong>Absolute links</strong> (from root):<br>
+<code>&lt;img src="/~yourusername/photo.jpg"&gt;</code><br>
+<code>&lt;link href="/~yourusername/css/style.css"&gt;</code></p>
+
+<p><strong>💡 Pro tip:</strong> Use relative links! They work locally AND on the server. Absolute links starting with <code>/~yourusername/</code> only work on the server.</p>
+
+<p><strong>Q: My page works locally but breaks online?</strong><br>
+A: Check your links! If you're using <code>file:///</code> paths or <code>C:\Users\</code> paths, those won't work on the web. Use relative paths instead.</p>
+</div>
+
 <div class="box">
 <h2>📚 Learning Resources</h2>
 

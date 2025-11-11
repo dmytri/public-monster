@@ -524,7 +524,9 @@ a:hover {
       return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
     }
   },
-  fetch(req) {
-    return new Response("Not Found", { status: 404 });
+  async fetch(req) {
+    const html = await Bun.file("404.html").text();
+    const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
+    return new Response(withEnv, { status: 404, headers: { "Content-Type": "text/html" } });
   }
 });

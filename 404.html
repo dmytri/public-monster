@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
+<title>404 - Page Not Found</title>
+<script type="module">
+import { register } from "https://esm.run/@teamhanko/hanko-elements";
+
+const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
+
+const token = await hanko.getSessionToken();
+if (token) {
+  window.hankoToken = token;
+  const user = await hanko.getUser();
+  const username = user.username;
+  
+  // Get current path
+  const path = window.location.pathname;
+  const filename = path.split('/').pop();
+  
+  if (filename) {
+    try {
+      const res = await fetch('/api/files', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      
+      if (res.ok) {
+        const files = await res.json();
+        const matches = files.filter(f => f.ObjectName.includes(filename));
+        
+        if (matches.length > 0) {
+          const suggestionsDiv = document.getElementById('suggestions');
+          suggestionsDiv.style.display = 'block';
+          
+          const list = document.getElementById('matchList');
+          matches.forEach(match => {
+            const li = document.createElement('li');
+            li.innerHTML = `<code>${match.ObjectName}</code> → <a href="/~${username}/${match.ObjectName}">/~${username}/${match.ObjectName}</a>`;
+            list.appendChild(li);
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check files', e);
+    }
+  }
+}
+</script>
+<style>
+body{background:#008080;color:#000;font-family:"Comic Neue","Comic Sans MS",cursive;margin:20px}
+main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto;position:relative}
+h1{color:#ff0000;font-family:Anton,Impact,"Arial Black",sans-serif;text-shadow:3px 3px 0 #000;font-size:3em;margin:0;animation:blink 1.5s infinite}
+@keyframes blink{50%{opacity:0}}
+h2{color:#000;background:#ff0;padding:5px 10px;display:inline-block}
+p{font-size:1.1em;line-height:1.6}
+a{color:#00f;text-decoration:underline}
+code{background:#fff;border:1px inset #999;padding:2px 6px;font-family:monospace;font-size:0.9em}
+#suggestions{display:none;background:#fff;border:2px inset #999;padding:15px;margin:20px 0}
+#suggestions h2{background:#ff69b4;color:#000}
+#matchList{list-style:none;padding:0}
+#matchList li{margin:10px 0;padding:10px;background:#ffffcc;border:2px outset #ff0}
+.construction{text-align:center;margin:20px 0;font-size:1.5em}
+</style>
+</head>
+<body>
+<main role="main">
+<h1>🚫 404 🚫</h1>
+<div class="construction">
+🚧 PAGE NOT FOUND 🚧
+</div>
+<p><strong>Oops!</strong> The page you're looking for doesn't exist.</p>
+<p>Maybe it moved? Maybe it never existed? Maybe it's in another dimension? 🌀</p>
+
+<div id="suggestions">
+<h2>🔍 Wait! We found similar files in your site:</h2>
+<p>These files exist in your account but aren't at this URL. You might need to fix your links!</p>
+<ul id="matchList"></ul>
+<p><strong>💡 Tip:</strong> Check your HTML for broken links. Read about <a href="/faq#linking">relative vs absolute links</a> in the FAQ.</p>
+</div>
+
+<p><a href="/">← Back to public.monster</a> | <a href="/faq">FAQ</a></p>
+</main>
+</body>
+</html>
