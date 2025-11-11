@@ -79,6 +79,42 @@ function formatDate(dateStr) {
   return Math.floor(days / 365) + 'y ago';
 }
 
+function getFileIcon(filename) {
+  const ext = filename.toLowerCase().split('.').pop();
+  
+  // Images
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'avif', 'heic', 'heif', 'bmp', 'tiff', 'tif'].includes(ext)) {
+    return '🖼️';
+  }
+  
+  // Video
+  if (['mp4', 'webm', 'mov', 'qt', 'ogv'].includes(ext)) {
+    return '🎬';
+  }
+  
+  // Audio
+  if (['mp3', 'wav', 'ogg', 'mid', 'midi'].includes(ext)) {
+    return '🎵';
+  }
+  
+  // Archives
+  if (['zip', 'tar', 'tgz', 'gz', 'bz2', 'xz', '7z'].includes(ext)) {
+    return '📦';
+  }
+  
+  // Documents
+  if (ext === 'pdf') {
+    return '📕';
+  }
+  
+  // Text/Code
+  if (['html', 'htm', 'css', 'js', 'mjs', 'jsx', 'ts', 'tsx', 'txt', 'md', 'mdx', 'json', 'xml', 'csv', 'tsv', 'yaml', 'yml', 'ini', 'conf', 'env', 'rss', 'atom', 'rdf'].includes(ext)) {
+    return '📄';
+  }
+  
+  return '👁️';
+}
+
 function buildTree(files) {
   const tree = {};
   
@@ -141,7 +177,7 @@ function renderNode(name, node, prefix, isLast, token) {
     const viewIcon = document.createElement('a');
     viewIcon.href = `/~${username}/${node.path}`;
     viewIcon.target = '_blank';
-    viewIcon.textContent = ' 👁️';
+    viewIcon.textContent = ' ' + getFileIcon(name);
     viewIcon.title = 'View on CDN';
     viewIcon.style.textDecoration = 'none';
     viewIcon.style.fontSize = '0.9em';
