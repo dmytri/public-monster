@@ -35,8 +35,34 @@ hanko.onUserDeleted(() => {
   window.location.href = '/';
 });
 
-// Manual migration function
+// Step 1: Prepare migration
+window.prepareMigration = async function() {
+  const confirmed = confirm('This will prepare your account for username migration. Click OK to continue.');
+  if (!confirmed) return;
+  
+  const token = await hanko.getSessionToken();
+  const res = await fetch('/api/prepare-migration', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (res.ok) {
+    const data = await res.json();
+    window.migrationToken = data.token;
+    alert('✓ Migration prepared! Now you can change your username in the profile below, then click the second button.');
+    document.getElementById('migrate-btn').style.display = 'inline-block';
+  } else {
+    alert('Failed to prepare migration.');
+  }
+};
+
+// Step 2: Execute migration
 window.migrateUsername = async function() {
+  if (!window.migrationToken) {
+    alert('You must click "Prepare migration" first!');
+    return;
+  }
+  
   const newUser = await hanko.getUser();
   const newUsername = newUser.username;
   const oldUsername = window.originalUsername;
@@ -46,24 +72,29 @@ window.migrateUsername = async function() {
     return;
   }
   
-  const confirmed = confirm(`Migrate all files from ~${oldUsername}/ to ~${newUsername}/?`);
+  const confirmed = confirm(`Migrate all files from ~${oldUsername}/ to ~${newUsername}/?\n\nIf this fails, you can change your username back to "${oldUsername}" to recover your files and try again.`);
   if (!confirmed) return;
   
-  const newToken = await hanko.getSessionToken();
+  const token = await hanko.getSessionToken();
   const res = await fetch('/api/migrate-username', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${newToken}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ oldUsername })
+    body: JSON.stringify({ 
+      oldUsername,
+      token: window.migrationToken 
+    })
   });
   
   if (res.ok) {
-    alert('Files migrated successfully!');
+    alert('✓ Files migrated successfully!');
+    delete window.migrationToken;
     window.location.reload();
   } else {
-    alert('Migration failed.');
+    const error = await res.text();
+    alert('Migration failed: ' + error + '\n\nYou can change your username back to "' + oldUsername + '" to recover your files.');
   }
 };
 </script>
@@ -84,8 +115,19 @@ a{color:#00f;text-decoration:underline}
 <h1>🌐 Profile 🌐</h1>
 <h2>~<span id="username"></span></h2>
 <div style="background:#ff0;border:3px solid #f00;padding:15px;margin:20px 0;font-weight:bold">
-⚠️ WARNING: Changing your username is EXPERIMENTAL. File migration may fail and you could lose your data. Make sure to download a backup before changing your username!<br><br>
-<button onclick="migrateUsername()" style="background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer;font-family:inherit;font-size:1em">I changed my username, please move my site</button>
+⚠️ <strong>WARNING: Changing your username is EXPERIMENTAL</strong><br><br>
+<strong>RISKS:</strong><br>
+• Migration may fail and you could lose your data<br>
+• If you get it wrong, your old files may become accessible to whoever registers your old username<br>
+• This is a temporary workaround until we build a proper solution<br><br>
+<strong>RECOVERY:</strong> If something goes wrong, change your username back to the original and you can probably recover your files and try again.<br><br>
+<strong>PROCESS:</strong><br>
+1. Download a backup first (use the 📥 icon in File Manager)<br>
+2. Click "Prepare migration" below<br>
+3. Change your username in the profile<br>
+4. Click "Complete migration"<br><br>
+<button onclick="prepareMigration()" style="background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer;font-family:inherit;font-size:1em;margin-right:10px">Step 1: Prepare migration</button>
+<button id="migrate-btn" onclick="migrateUsername()" style="display:none;background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer;font-family:inherit;font-size:1em">Step 2: Complete migration</button>
 </div>
 <div id="profile-container">
   <hanko-profile lang="en" translations='{"en":{"profile":{"username":{"title":"Username (cannot be changed)"}}}}'></hanko-profile>
