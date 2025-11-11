@@ -34,39 +34,34 @@ hanko.onUserDeleted(() => {
   window.location.href = '/';
 });
 
-// Poll for username changes and migrate storage
-let currentUsername = user.username;
-setInterval(async () => {
+// Manual migration function
+window.migrateUsername = async function() {
+  const oldUsername = prompt('Enter your OLD username to migrate files from:');
+  if (!oldUsername) return;
+  
   const newUser = await hanko.getUser();
   const newUsername = newUser.username;
   
-  if (currentUsername !== newUsername) {
-    const confirmed = confirm(`Migrate all files from ~${currentUsername}/ to ~${newUsername}/?`);
-    if (!confirmed) {
-      alert('Username changed but files not migrated. Your old files are still at ~' + currentUsername + '/');
-      currentUsername = newUsername;
-      return;
-    }
-    
-    const newToken = await hanko.getSessionToken();
-    const res = await fetch('/api/migrate-username', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${newToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ oldUsername: currentUsername })
-    });
-    
-    if (res.ok) {
-      alert('Files migrated successfully!');
-      window.location.reload();
-    } else {
-      alert('Migration failed. Your files are still at ~' + currentUsername + '/');
-    }
-    currentUsername = newUsername;
+  const confirmed = confirm(`Migrate all files from ~${oldUsername}/ to ~${newUsername}/?`);
+  if (!confirmed) return;
+  
+  const newToken = await hanko.getSessionToken();
+  const res = await fetch('/api/migrate-username', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${newToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ oldUsername })
+  });
+  
+  if (res.ok) {
+    alert('Files migrated successfully!');
+    window.location.reload();
+  } else {
+    alert('Migration failed. Please check that the old username is correct.');
   }
-}, 2000);
+};
 </script>
 <style>
 body{background:#008080;color:#000;font-family:"Comic Neue","Comic Sans MS",cursive;margin:20px}
@@ -85,7 +80,8 @@ a{color:#00f;text-decoration:underline}
 <h1>🌐 Profile 🌐</h1>
 <h2>~<span id="username"></span></h2>
 <div style="background:#ff0;border:3px solid #f00;padding:15px;margin:20px 0;font-weight:bold">
-⚠️ WARNING: Changing your username is EXPERIMENTAL. File migration may fail and you could lose your data. Make sure to download a backup before changing your username!
+⚠️ WARNING: Changing your username is EXPERIMENTAL. File migration may fail and you could lose your data. Make sure to download a backup before changing your username!<br><br>
+<button onclick="migrateUsername()" style="background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer;font-family:inherit;font-size:1em">I changed my username, please move my site</button>
 </div>
 <div id="profile-container">
   <hanko-profile lang="en" translations='{"en":{"profile":{"username":{"title":"Username (cannot be changed)"}}}}'></hanko-profile>
