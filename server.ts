@@ -325,35 +325,33 @@ Bun.serve({
           
           // Copy each file to new location
           for (const file of files) {
-            const oldPath = file.ObjectName; // e.g. "~quirk/index.html"
-            const newPath = oldPath.replace(`~${oldUsername}/`, `~${newUsername}/`);
             
             // Download from old location
-            const downloadUrl = `${BUNNY_STORAGE_URL}${oldPath}`;
+            const downloadUrl = `${BUNNY_STORAGE_URL}/~${oldUsername}/${file.ObjectName}`;
             console.log(`Downloading: ${downloadUrl}`);
             const downloadRes = await fetch(downloadUrl, {
               headers: { AccessKey: BUNNY_API_KEY }
             });
             if (!downloadRes.ok) {
-              console.error(`Failed to download ${oldPath}`);
+              console.error(`Failed to download ${file.ObjectName}`);
               continue;
             }
             const data = await downloadRes.arrayBuffer();
             
             // Upload to new location
-            const uploadRes = await fetch(`${BUNNY_STORAGE_URL}${newPath}`, {
+            const uploadRes = await fetch(`${BUNNY_STORAGE_URL}/~${newUsername}/${file.ObjectName}`, {
               method: "PUT",
               headers: { AccessKey: BUNNY_API_KEY },
               body: data
             });
             if (!uploadRes.ok) {
-              console.error(`Failed to upload ${newPath}`);
+              console.error(`Failed to upload ${newUsername}`);
               throw new Error(`Upload failed`);
             }
-            console.log(`Migrated: ${oldPath} -> ${newPath}`);
+            console.log(`Migrated: ${file.ObjectName} -> ${newUsername}`);
             
             // Delete old file
-            await fetch(`${BUNNY_STORAGE_URL}/${oldPath}`, {
+            await fetch(`${BUNNY_STORAGE_URL}/${file.ObjectName}`, {
               method: "DELETE",
               headers: { AccessKey: BUNNY_API_KEY }
             });
