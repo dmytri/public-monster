@@ -305,6 +305,7 @@ Bun.serve({
           
           // List all files in old directory
           const files = await listFilesRecursive(`/~${oldUsername}/`, oldUsername);
+          console.log(`Migrating ${files.length} files from ~${oldUsername}/ to ~${newUsername}/`);
           
           // Copy each file to new location
           for (const file of files) {
@@ -312,18 +313,26 @@ Bun.serve({
             const newPath = oldPath.replace(`/~${oldUsername}/`, `/~${newUsername}/`);
             
             // Download from old location
-            const res = await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
+            const downloadRes = await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
               headers: { AccessKey: BUNNY_API_KEY }
             });
-            if (!res.ok) continue;
-            const data = await res.arrayBuffer();
+            if (!downloadRes.ok) {
+              console.error(`Failed to download ${oldPath}`);
+              continue;
+            }
+            const data = await downloadRes.arrayBuffer();
             
             // Upload to new location
-            await fetch(`${BUNNY_STORAGE_URL}${newPath}`, {
+            const uploadRes = await fetch(`${BUNNY_STORAGE_URL}${newPath}`, {
               method: "PUT",
               headers: { AccessKey: BUNNY_API_KEY },
               body: data
             });
+            if (!uploadRes.ok) {
+              console.error(`Failed to upload ${newPath}`);
+              throw new Error(`Upload failed`);
+            }
+            console.log(`Migrated: ${oldPath} -> ${newPath}`);
             
             // Delete old file
             await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
