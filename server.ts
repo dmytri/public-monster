@@ -380,6 +380,105 @@ Bun.serve({
         }
       }
     },
+    "/api/create-starter": {
+      POST: async req => {
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        let username: string;
+        try {
+          username = await getUsername(token);
+        } catch (err) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        const starterHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>~${username} on public.monster</title>
+<style>
+body {
+  background: linear-gradient(45deg, #008080 25%, #ff00ff 25%, #ff00ff 50%, #008080 50%, #008080 75%, #ff00ff 75%, #ff00ff);
+  background-size: 40px 40px;
+  font-family: "Comic Sans MS", cursive;
+  color: #ffff00;
+  text-align: center;
+  padding: 20px;
+  animation: bg-scroll 2s linear infinite;
+}
+@keyframes bg-scroll {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+main {
+  background: #000;
+  border: 5px ridge #ff00ff;
+  padding: 40px;
+  max-width: 600px;
+  margin: 40px auto;
+  box-shadow: 10px 10px 0 rgba(255,0,255,0.5);
+}
+h1 {
+  font-size: 3em;
+  text-shadow: 3px 3px 0 #ff00ff, 6px 6px 0 #00ffff;
+  animation: blink 1s infinite;
+  margin: 0;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+p {
+  font-size: 1.2em;
+  line-height: 1.6;
+}
+a {
+  color: #00ff00;
+  text-decoration: none;
+  font-weight: bold;
+}
+a:hover {
+  color: #ffff00;
+  text-decoration: underline wavy;
+}
+.emoji {
+  font-size: 2em;
+  display: inline-block;
+  animation: spin 2s linear infinite;
+}
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>🌐 ~${username} 🌐</h1>
+<p><span class="emoji">✨</span></p>
+<p>Welcome to my corner of the web!</p>
+<p>This is my personal homepage on <a href="https://public.monster">public.monster</a></p>
+<p>🚧 Under construction 🚧</p>
+<p><a href="https://public.monster">← Back to public.monster</a></p>
+</main>
+</body>
+</html>`;
+
+        try {
+          // Update ETag first
+          const etagValue = Bun.hash(username + Date.now());
+          const etagUrl = `${BUNNY_STORAGE_URL}/~${username}/.etags`;
+          await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
+          
+          // Upload starter page
+          const url = `${BUNNY_STORAGE_URL}/~${username}/index.html`;
+          const res = await fetch(url, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: starterHTML });
+          if (!res.ok) throw new Error("Upload failed");
+          
+          return new Response("OK");
+        } catch (err) {
+          return new Response("Failed to create starter page", { status: 500 });
+        }
+      }
+    },
     "/social-card.png": () => {
       const file = Bun.file("social-card.png");
       return new Response(file, { headers: { "Content-Type": "image/png" } });
