@@ -57,13 +57,20 @@ async function getUsername(token: string) {
   // Verify JWT first
   await jwtVerify(token, JWKS);
   
-  // Fetch current user data from Hanko API
-  const res = await fetch(`${HANKO_API_URL}/users/me`, {
+  // Get current user ID
+  const meRes = await fetch(`${HANKO_API_URL}/me`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error('Failed to fetch user');
+  if (!meRes.ok) throw new Error('Failed to fetch user ID');
+  const { id } = await meRes.json();
   
-  const user = await res.json();
+  // Get full user data
+  const userRes = await fetch(`${HANKO_API_URL}/users/${id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!userRes.ok) throw new Error('Failed to fetch user');
+  
+  const user = await userRes.json();
   return user.username as string;
 }
 
