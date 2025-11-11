@@ -416,58 +416,73 @@ Bun.serve({
   <link href="https://fonts.bunny.net/css?family=comic-neue:400,700" rel="stylesheet">
   <title>~${username} on public.monster</title>
   <style>
-    /* 90s diagonal stripes background */
+    /* Striped background */
     body {
-      background: linear-gradient(45deg, #008080 25%, #ff00ff 25%, #ff00ff 50%, #008080 50%, #008080 75%, #ff00ff 75%, #ff00ff);
-      background-size: 40px 40px;
+      background-image: 
+        repeating-linear-gradient(
+          45deg,
+          #008080 0px,
+          #008080 20px,
+          #ff00ff 20px,
+          #ff00ff 40px
+        );
       font-family: "Comic Neue", "Comic Sans MS", cursive;
-      color: #000;
+      color: #ffff00;
+      text-align: center;
       padding: 20px;
-      animation: bg-scroll 3s linear infinite;
-    }
-    @keyframes bg-scroll {
-      0% { background-position: 0 0; }
-      100% { background-position: 40px 40px; }
     }
     
     /* Main content box */
     main {
-      background: #c0c0c0;
-      border: 4px outset #fff;
-      padding: 30px;
+      background: #000;
+      border: 5px ridge #ff00ff;
+      padding: 40px;
       max-width: 600px;
-      margin: 0 auto;
+      margin: 40px auto;
+      box-shadow: 10px 10px 0 rgba(255, 0, 255, 0.5);
     }
     
     h1 {
-      color: #ff00ff;
-      font-size: 2em;
-      text-shadow: 2px 2px 0 #000;
+      color: #ffff00;
+      font-size: 2.5em;
+      text-shadow: 3px 3px 0 #ff00ff, 6px 6px 0 #00ffff;
       margin: 0 0 20px 0;
     }
     
     p {
-      font-size: 1em;
+      font-size: 1.1em;
       line-height: 1.6;
-      margin: 10px 0;
+      margin: 15px 0;
     }
     
     a {
-      color: #00f;
+      color: #00ff00;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    
+    a:hover {
+      color: #ffff00;
       text-decoration: underline;
     }
     
     .box {
-      background: #fff;
-      border: 2px inset #999;
-      padding: 15px;
-      margin: 15px 0;
+      background: #000;
+      border: 3px solid #00ffff;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
     }
     
     code {
-      background: #ff0;
+      background: #ff00ff;
+      color: #fff;
       padding: 2px 6px;
       font-family: monospace;
+    }
+    
+    strong {
+      color: #00ffff;
     }
   </style>
 </head>
