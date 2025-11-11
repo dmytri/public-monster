@@ -502,8 +502,7 @@ Bun.serve({
     
     <div class="box">
       <p><strong>💡 Tips:</strong></p>
-      <p>• View source (right-click → View Page Source) to see how this works<br>
-      • HTML is just text with tags like <code>&lt;p&gt;</code> and <code>&lt;a&gt;</code><br>
+      <p>• HTML is just text with tags like <code>&lt;p&gt;</code> and <code>&lt;a&gt;</code><br>
       • Check the <a href="https://public.monster/faq">FAQ</a> for help with links and images</p>
     </div>
     
