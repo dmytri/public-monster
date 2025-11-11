@@ -160,11 +160,11 @@ A: You're probably using the wrong path! There are two types of links:</p>
 <code>&lt;link href="css/style.css"&gt;</code> - in a subfolder<br>
 <code>&lt;a href="../index.html"&gt;</code> - go up one folder</p>
 
-<p><strong>Absolute links</strong> (from root):<br>
+<p><strong>Absolute links</strong> (from root - note the leading <code>/</code> slash):<br>
 <code>&lt;img src="/~yourusername/photo.jpg"&gt;</code><br>
 <code>&lt;link href="/~yourusername/css/style.css"&gt;</code></p>
 
-<p><strong>💡 Pro tip:</strong> Use relative links! They work locally AND on the server. Absolute links starting with <code>/~yourusername/</code> only work on the server.</p>
+<p><strong>💡 Pro tip:</strong> Use relative links! They work locally AND on the server. Absolute links starting with a <code>/</code> slash (like <code>/~yourusername/</code>) only work on the server.</p>
 
 <p><strong>Q: My page works locally but breaks online?</strong><br>
 A: Check your links! If you're using <code>file:///</code> paths or <code>C:\Users\</code> paths, those won't work on the web. Use relative paths instead.</p>
