@@ -410,74 +410,92 @@ Bun.serve({
         const starterHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="preconnect" href="https://fonts.bunny.net">
-<link href="https://fonts.bunny.net/css?family=comic-neue:400,700" rel="stylesheet">
-<title>~${username} on public.monster</title>
-<style>
-body {
-  background: linear-gradient(45deg, #008080 25%, #ff00ff 25%, #ff00ff 50%, #008080 50%, #008080 75%, #ff00ff 75%, #ff00ff);
-  background-size: 40px 40px;
-  font-family: "Comic Neue", "Comic Sans MS", cursive;
-  color: #ffff00;
-  text-align: center;
-  padding: 20px;
-  animation: bg-scroll 2s linear infinite;
-}
-@keyframes bg-scroll {
-  0% { background-position: 0 0; }
-  100% { background-position: 40px 40px; }
-}
-main {
-  background: #000;
-  border: 5px ridge #ff00ff;
-  padding: 40px;
-  max-width: 600px;
-  margin: 40px auto;
-  box-shadow: 10px 10px 0 rgba(255,0,255,0.5);
-}
-h1 {
-  font-size: 3em;
-  text-shadow: 3px 3px 0 #ff00ff, 6px 6px 0 #00ffff;
-  animation: blink 1s infinite;
-  margin: 0;
-}
-@keyframes blink {
-  50% { opacity: 0; }
-}
-p {
-  font-size: 1.2em;
-  line-height: 1.6;
-}
-a {
-  color: #00ff00;
-  text-decoration: none;
-  font-weight: bold;
-}
-a:hover {
-  color: #ffff00;
-  text-decoration: underline wavy;
-}
-.emoji {
-  font-size: 2em;
-  display: inline-block;
-  animation: spin 2s linear infinite;
-}
-@keyframes spin {
-  100% { transform: rotate(360deg); }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.bunny.net">
+  <link href="https://fonts.bunny.net/css?family=comic-neue:400,700" rel="stylesheet">
+  <title>~${username} on public.monster</title>
+  <style>
+    /* 90s diagonal stripes background */
+    body {
+      background: linear-gradient(45deg, #008080 25%, #ff00ff 25%, #ff00ff 50%, #008080 50%, #008080 75%, #ff00ff 75%, #ff00ff);
+      background-size: 40px 40px;
+      font-family: "Comic Neue", "Comic Sans MS", cursive;
+      color: #000;
+      padding: 20px;
+      animation: bg-scroll 3s linear infinite;
+    }
+    @keyframes bg-scroll {
+      0% { background-position: 0 0; }
+      100% { background-position: 40px 40px; }
+    }
+    
+    /* Main content box */
+    main {
+      background: #c0c0c0;
+      border: 4px outset #fff;
+      padding: 30px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      color: #ff00ff;
+      font-size: 2em;
+      text-shadow: 2px 2px 0 #000;
+      margin: 0 0 20px 0;
+    }
+    
+    p {
+      font-size: 1em;
+      line-height: 1.6;
+      margin: 10px 0;
+    }
+    
+    a {
+      color: #00f;
+      text-decoration: underline;
+    }
+    
+    .box {
+      background: #fff;
+      border: 2px inset #999;
+      padding: 15px;
+      margin: 15px 0;
+    }
+    
+    code {
+      background: #ff0;
+      padding: 2px 6px;
+      font-family: monospace;
+    }
+  </style>
 </head>
 <body>
-<main>
-<h1>🌐 ~${username} 🌐</h1>
-<p><span class="emoji">✨</span></p>
-<p>Welcome to my corner of the web!</p>
-<p>This is my personal homepage on <a href="https://public.monster">public.monster</a></p>
-<p>🚧 Under construction 🚧</p>
-<p><a href="https://public.monster">← Back to public.monster</a></p>
-</main>
+  <main>
+    <h1>🌐 Welcome to ~${username}!</h1>
+    
+    <p><strong>You're live on the web!</strong> This is your starter page. Download it, edit it, make it yours.</p>
+    
+    <div class="box">
+      <p><strong>✏️ How to edit:</strong></p>
+      <p>1. Go to <a href="https://public.monster/filemanager">File Manager</a><br>
+      2. Download <code>index.html</code><br>
+      3. Edit it with any text editor<br>
+      4. Upload it back</p>
+    </div>
+    
+    <div class="box">
+      <p><strong>💡 Tips:</strong></p>
+      <p>• View source (right-click → View Page Source) to see how this works<br>
+      • HTML is just text with tags like <code>&lt;p&gt;</code> and <code>&lt;a&gt;</code><br>
+      • Check the <a href="https://public.monster/faq">FAQ</a> for help with links and images</p>
+    </div>
+    
+    <p>🚧 <em>Under construction since ${new Date().getFullYear()}</em> 🚧</p>
+    
+    <p><a href="https://public.monster">← public.monster</a></p>
+  </main>
 </body>
 </html>`;
 
