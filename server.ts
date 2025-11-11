@@ -309,11 +309,11 @@ Bun.serve({
           
           // Copy each file to new location
           for (const file of files) {
-            const oldPath = file.ObjectName;
-            const newPath = oldPath.replace(`/~${oldUsername}/`, `/~${newUsername}/`);
+            const oldPath = file.ObjectName; // e.g. "~quirk/index.html"
+            const newPath = oldPath.replace(`~${oldUsername}/`, `~${newUsername}/`);
             
             // Download from old location
-            const downloadRes = await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
+            const downloadRes = await fetch(`${BUNNY_STORAGE_URL}/${oldPath}`, {
               headers: { AccessKey: BUNNY_API_KEY }
             });
             if (!downloadRes.ok) {
@@ -323,7 +323,7 @@ Bun.serve({
             const data = await downloadRes.arrayBuffer();
             
             // Upload to new location
-            const uploadRes = await fetch(`${BUNNY_STORAGE_URL}${newPath}`, {
+            const uploadRes = await fetch(`${BUNNY_STORAGE_URL}/${newPath}`, {
               method: "PUT",
               headers: { AccessKey: BUNNY_API_KEY },
               body: data
@@ -335,7 +335,7 @@ Bun.serve({
             console.log(`Migrated: ${oldPath} -> ${newPath}`);
             
             // Delete old file
-            await fetch(`${BUNNY_STORAGE_URL}${oldPath}`, {
+            await fetch(`${BUNNY_STORAGE_URL}/${oldPath}`, {
               method: "DELETE",
               headers: { AccessKey: BUNNY_API_KEY }
             });
