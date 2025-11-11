@@ -54,8 +54,17 @@ const ALLOWED_EXTENSIONS = [
 ];
 
 async function getUsername(token: string) {
-  const { payload } = await jwtVerify(token, JWKS);
-  return payload.username as string;
+  // Verify JWT first
+  await jwtVerify(token, JWKS);
+  
+  // Fetch current user data from Hanko API
+  const res = await fetch(`${HANKO_API_URL}/users/me`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error('Failed to fetch user');
+  
+  const user = await res.json();
+  return user.username as string;
 }
 
 async function listFilesRecursive(path: string, user: string): Promise<any[]> {
@@ -277,7 +286,7 @@ Bun.serve({
     "/api/migrate-username": {
       POST: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        let newUsername: string
+        let newUsername: string;
         try {
           newUsername = await getUsername(token);
         } catch (err) {
