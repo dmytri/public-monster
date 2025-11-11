@@ -412,12 +412,14 @@ Bun.serve({
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=comic-neue:400,700" rel="stylesheet">
 <title>~${username} on public.monster</title>
 <style>
 body {
   background: linear-gradient(45deg, #008080 25%, #ff00ff 25%, #ff00ff 50%, #008080 50%, #008080 75%, #ff00ff 75%, #ff00ff);
   background-size: 40px 40px;
-  font-family: "Comic Sans MS", cursive;
+  font-family: "Comic Neue", "Comic Sans MS", cursive;
   color: #ffff00;
   text-align: center;
   padding: 20px;
