@@ -33,6 +33,15 @@ hanko.onSessionExpired(() => {
 hanko.onUserDeleted(() => {
   window.location.href = '/';
 });
+
+// Listen for username changes and warn user
+const profileElement = document.querySelector('hanko-profile');
+if (profileElement) {
+  profileElement.addEventListener('onUsernameChanged', (event) => {
+    alert('Username changes are not currently supported. Changing your username would require migrating all your files to a new storage path. Please contact support if you need to change your username.');
+    window.location.reload();
+  });
+}
 </script>
 <style>
 body{background:#008080;color:#000;font-family:"Comic Neue","Comic Sans MS",cursive;margin:20px}
