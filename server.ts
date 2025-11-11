@@ -145,11 +145,11 @@ Bun.serve({
         }
 
         try {
-          await uploadToBunny('/~' + username + '/' + path, file);
-          
-          // Update ETag
+          // Update ETag first
           const etagValue = Bun.hash(username + Date.now());
           await uploadToBunny('/~' + username + '/.etags', new Blob([etagValue.toString()]));
+          
+          await uploadToBunny('/~' + username + '/' + path, file);
           
           return new Response("OK");
         } catch (err) {
@@ -208,14 +208,14 @@ Bun.serve({
         if (!path) return new Response("Bad request", { status: 400 });
 
         try {
-          const url = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
-          const res = await fetch(url, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
-          if (!res.ok) return new Response("Delete failed", { status: 500 });
-          
-          // Update ETag
+          // Update ETag first
           const etagValue = Bun.hash(username + Date.now());
           const etagUrl = `${BUNNY_STORAGE_URL}/~${username}/.etags`;
           await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
+          
+          const url = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
+          const res = await fetch(url, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
+          if (!res.ok) return new Response("Delete failed", { status: 500 });
           
           return new Response("OK");
         } catch {
