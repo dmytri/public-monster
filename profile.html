@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
+<title>Profile - public.monster</title>
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-neokOJSyQG1cGL1NXRHGs.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
+<script type="module">
+import { register } from "https://esm.run/@teamhanko/hanko-elements";
+
+const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
+
+const token = await hanko.getSessionToken();
+if (!token) {
+  window.location.href = '/';
+} else {
+  const user = await hanko.getUser();
+  document.getElementById('username').textContent = user.username;
+}
+
+hanko.onSessionExpired(() => {
+  window.location.href = '/';
+});
+
+hanko.onUserDeleted(() => {
+  window.location.href = '/';
+});
+</script>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Comic Neue', cursive;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  font-family: 'Anton', sans-serif;
+  font-size: 4rem;
+  color: #ff00ff;
+  text-shadow: 4px 4px 0 #00ffff, 8px 8px 0 rgba(0,0,0,0.2);
+  margin: 20px 0;
+  text-align: center;
+}
+
+.globe {
+  font-size: 3rem;
+  display: inline-block;
+  animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.beta {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ffff00;
+  color: #000;
+  padding: 10px 20px;
+  font-weight: bold;
+  transform: rotate(15deg);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.2);
+  border: 3px solid #000;
+}
+
+.container {
+  background: rgba(192, 192, 192, 0.95);
+  border: 4px outset #fff;
+  padding: 30px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 8px 8px 0 rgba(0,0,0,0.2);
+  margin: 20px 0;
+}
+
+.username {
+  background: #ffff00;
+  padding: 10px 20px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.back-link {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: #008080;
+  color: #fff;
+  text-decoration: none;
+  border: 3px solid #000;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.2);
+  font-weight: bold;
+}
+
+.back-link:hover {
+  background: #006666;
+}
+
+hanko-profile {
+  --color: #008080;
+  --brand-color: #008080;
+}
+</style>
+</head>
+<body>
+<div class="beta">BETA</div>
+
+<h1><span class="globe">🌐</span> Profile <span class="globe">🌐</span></h1>
+
+<div class="container">
+  <div class="username">~<span id="username"></span></div>
+  <hanko-profile></hanko-profile>
+</div>
+
+<a href="/" class="back-link">← Back to Upload</a>
+
+<footer style="margin-top: 40px; text-align: center; color: #fff;">
+  <p>by <a href="/~dmytri" style="color: #ffff00;">~dmytri</a> | <a href="/about" style="color: #ffff00;">about</a> | <a href="/faq" style="color: #ffff00;">faq</a></p>
+</footer>
+</body>
+</html>

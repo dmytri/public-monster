@@ -260,6 +260,11 @@ Bun.serve({
       const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
       return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
     },
+    "/profile": async () => {
+      const html = await Bun.file("profile.html").text();
+      const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
+      return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
+    },
     "/": async req => {
       const html = await Bun.file("index.html").text();
       const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
