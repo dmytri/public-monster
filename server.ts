@@ -53,7 +53,7 @@ const ALLOWED_EXTENSIONS = [
   '.webmanifest', '.map'
 ];
 
-async function getUsername(token: string) {
+async function getUserInfo(token: string) {
   // Verify JWT first
   await jwtVerify(token, JWKS);
   
@@ -71,7 +71,12 @@ async function getUsername(token: string) {
   if (!userRes.ok) throw new Error('Failed to fetch user');
   
   const user = await userRes.json();
-  return user.username as string;
+  return { userid: id, username: user.username as string };
+}
+
+async function getUsername(token: string) {
+  const userInfo = await getUserInfo(token);
+  return userInfo.username;
 }
 
 async function listFilesRecursive(path: string, user: string): Promise<any[]> {
@@ -115,9 +120,12 @@ Bun.serve({
     "/api/files": {
       POST: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        let username: string
+        let username: string;
+        let userid: string;
         try {
-          username = await getUsername(token);
+          const userInfo = await getUserInfo(token);
+          username = userInfo.username;
+          userid = userInfo.userid;
         } catch (err) {
           return new Response("Unauthorized", { status: 401 });
         }
@@ -146,8 +154,8 @@ Bun.serve({
 
         try {
           // Update ETag first
-          const etagValue = Bun.hash(username + Date.now());
-          await uploadToBunny('/~' + username + '/.etags', new Blob([etagValue.toString()]));
+          const etagValue = Bun.hash(userid + Date.now());
+          await uploadToBunny('/!' + userid + '/etag', new Blob([etagValue.toString()]));
           
           await uploadToBunny('/~' + username + '/' + path, file);
           
@@ -158,9 +166,12 @@ Bun.serve({
       },
       GET: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        let username: string
+        let username: string;
+        let userid: string;
         try {
-          username = await getUsername(token);
+          const userInfo = await getUserInfo(token);
+          username = userInfo.username;
+          userid = userInfo.userid;
         } catch (err) {
           return new Response("Unauthorized", { status: 401 });
         }
@@ -169,9 +180,9 @@ Bun.serve({
           const files = await listFilesRecursive(`/~${username}/`, username);
           const content = JSON.stringify(files);
           
-          // Read ETag from .etags file
+          // Read ETag from etags file
           let etag = '"0"';
-          const etagRes = await fetch(`${BUNNY_STORAGE_URL}/~${username}/.etags`, { headers: { AccessKey: BUNNY_API_KEY } });
+          const etagRes = await fetch(`${BUNNY_STORAGE_URL}/!${userid}/etag`, { headers: { AccessKey: BUNNY_API_KEY } });
           if (etagRes.ok) {
             const etagValue = await etagRes.text();
             etag = `"${etagValue}"`;
@@ -196,9 +207,12 @@ Bun.serve({
       },
       DELETE: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        let username: string
+        let username: string;
+        let userid: string;
         try {
-          username = await getUsername(token);
+          const userInfo = await getUserInfo(token);
+          username = userInfo.username;
+          userid = userInfo.userid;
         } catch (err) {
           return new Response("Unauthorized", { status: 401 });
         }
@@ -209,8 +223,8 @@ Bun.serve({
 
         try {
           // Update ETag first
-          const etagValue = Bun.hash(username + Date.now());
-          const etagUrl = `${BUNNY_STORAGE_URL}/~${username}/.etags`;
+          const etagValue = Bun.hash(userid + Date.now());
+          const etagUrl = `${BUNNY_STORAGE_URL}/!${userid}/etag`;
           await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
           
           const url = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
@@ -384,8 +398,11 @@ Bun.serve({
       POST: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
         let username: string;
+        let userid: string;
         try {
-          username = await getUsername(token);
+          const userInfo = await getUserInfo(token);
+          username = userInfo.username;
+          userid = userInfo.userid;
         } catch (err) {
           return new Response("Unauthorized", { status: 401 });
         }
@@ -464,8 +481,8 @@ a:hover {
 
         try {
           // Update ETag first
-          const etagValue = Bun.hash(username + Date.now());
-          const etagUrl = `${BUNNY_STORAGE_URL}/~${username}/.etags`;
+          const etagValue = Bun.hash(userid + Date.now());
+          const etagUrl = `${BUNNY_STORAGE_URL}/!${userid}/etag`;
           await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
           
           // Upload starter page
