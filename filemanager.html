@@ -182,6 +182,12 @@ function renderTree(files, token) {
   const headerText = document.createElement('span');
   headerText.textContent = `~${username}/`;
   
+  const deleteAllBtn = document.createElement('span');
+  deleteAllBtn.textContent = ' 🗑️';
+  deleteAllBtn.style.cursor = 'pointer';
+  deleteAllBtn.title = 'Delete everything (cannot be undone!)';
+  deleteAllBtn.onclick = () => deleteEverything(files, token);
+  
   const downloadBtn = document.createElement('span');
   downloadBtn.textContent = ' 📥';
   downloadBtn.style.cursor = 'pointer';
@@ -189,6 +195,7 @@ function renderTree(files, token) {
   downloadBtn.onclick = () => downloadAllAsZip(files, token);
   
   header.appendChild(headerText);
+  header.appendChild(deleteAllBtn);
   header.appendChild(downloadBtn);
   pre.appendChild(header);
   
@@ -225,6 +232,55 @@ async function downloadAllAsZip(files, token) {
   } else {
     alert('Failed to download zip');
   }
+}
+
+async function deleteEverything(files, token) {
+  const userInput = prompt('Type "EVERYTHING" in all caps to confirm deletion of ALL files.\n\nWARNING: This cannot be undone!');
+  if (userInput !== 'EVERYTHING') {
+    if (userInput !== null) alert('Confirmation text does not match. Deletion cancelled.');
+    return;
+  }
+  
+  // Collect all file paths
+  const filesToDelete = files.map(f => f.ObjectName);
+  
+  // Create progress indicator
+  const progressDiv = document.createElement('div');
+  progressDiv.style.position = 'fixed';
+  progressDiv.style.top = '50%';
+  progressDiv.style.left = '50%';
+  progressDiv.style.transform = 'translate(-50%, -50%)';
+  progressDiv.style.background = '#c0c0c0';
+  progressDiv.style.border = '4px outset #fff';
+  progressDiv.style.padding = '20px';
+  progressDiv.style.zIndex = '10000';
+  progressDiv.style.minWidth = '300px';
+  progressDiv.textContent = `Deleting 0 of ${filesToDelete.length} files...`;
+  document.body.appendChild(progressDiv);
+  
+  // Delete all files
+  for (let i = 0; i < filesToDelete.length; i++) {
+    const path = filesToDelete[i];
+    progressDiv.textContent = `Deleting ${i + 1} of ${filesToDelete.length} files...`;
+    
+    const res = await fetch('/api/files', {
+      method: 'DELETE',
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ path })
+    });
+    
+    if (!res.ok) {
+      document.body.removeChild(progressDiv);
+      alert(`Failed to delete ${path}`);
+      return;
+    }
+  }
+  
+  document.body.removeChild(progressDiv);
+  loadFiles(token);
 }
 
 async function deleteDirectory(name, node, token) {
