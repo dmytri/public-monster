@@ -165,10 +165,12 @@ function renderNode(name, node, prefix, isLast, token) {
     const timestamp = document.createElement('span');
     timestamp.textContent = ' [' + formatDate(node.lastChanged) + ']';
     timestamp.style.color = '#666';
+    timestamp.title = 'Last modified';
     
     const size = document.createElement('span');
     size.textContent = ' ' + formatSize(node.size);
     size.style.color = '#666';
+    size.title = 'File size';
     
     const viewIcon = document.createElement('a');
     viewIcon.href = `/~${username}/${node.path}`;
@@ -182,6 +184,7 @@ function renderNode(name, node, prefix, isLast, token) {
     deleteBtn.textContent = ' 🗑️';
     deleteBtn.style.cursor = 'pointer';
     deleteBtn.style.fontSize = '0.9em';
+    deleteBtn.title = 'Delete file';
     deleteBtn.onclick = () => deleteFile(node.path, token);
     
     line.appendChild(prefixSpan);
