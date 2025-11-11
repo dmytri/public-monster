@@ -24,6 +24,7 @@ if (!token) {
 } else {
   const user = await hanko.getUser();
   document.getElementById('username').textContent = user.username;
+  window.originalUsername = user.username; // Store for migration
 }
 
 hanko.onSessionExpired(() => {
@@ -36,11 +37,14 @@ hanko.onUserDeleted(() => {
 
 // Manual migration function
 window.migrateUsername = async function() {
-  const oldUsername = prompt('Enter your OLD username to migrate files from:');
-  if (!oldUsername) return;
-  
   const newUser = await hanko.getUser();
   const newUsername = newUser.username;
+  const oldUsername = window.originalUsername;
+  
+  if (oldUsername === newUsername) {
+    alert('Your username has not changed.');
+    return;
+  }
   
   const confirmed = confirm(`Migrate all files from ~${oldUsername}/ to ~${newUsername}/?`);
   if (!confirmed) return;
@@ -59,7 +63,7 @@ window.migrateUsername = async function() {
     alert('Files migrated successfully!');
     window.location.reload();
   } else {
-    alert('Migration failed. Please check that the old username is correct.');
+    alert('Migration failed.');
   }
 };
 </script>
