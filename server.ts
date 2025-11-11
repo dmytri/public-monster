@@ -90,6 +90,7 @@ async function listFilesRecursive(path: string, user: string): Promise<any[]> {
       allFiles.push({
         ObjectName: path.replace(`/~${user}/`, '') + item.ObjectName,
         Length: item.Length,
+        LastChanged: item.LastChanged,
         IsDirectory: false
       });
     }
