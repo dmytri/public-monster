@@ -67,16 +67,12 @@ function formatSize(bytes) {
 
 function formatDate(dateStr) {
   const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now - date;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return days + 'd ago';
-  if (days < 30) return Math.floor(days / 7) + 'w ago';
-  if (days < 365) return Math.floor(days / 30) + 'mo ago';
-  return Math.floor(days / 365) + 'y ago';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
 function getFileIcon(filename) {
