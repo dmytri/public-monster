@@ -58,6 +58,30 @@ async function getUsername(token: string) {
   return payload.username as string;
 }
 
+async function listFilesRecursive(path: string, user: string): Promise<any[]> {
+  const url = `${BUNNY_STORAGE_URL}${path}`;
+  const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
+  if (!res.ok) return [];
+  
+  const items = await res.json();
+  let allFiles: any[] = [];
+  
+  for (const item of items) {
+    if (item.IsDirectory) {
+      const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`, user);
+      allFiles = allFiles.concat(subFiles);
+    } else {
+      allFiles.push({
+        ObjectName: path.replace(`/~${user}/`, '') + item.ObjectName,
+        Length: item.Length,
+        IsDirectory: false
+      });
+    }
+  }
+  
+  return allFiles;
+}
+
 console.log('~ public.monster')
 Bun.serve({
   hostname: '0.0.0.0',
@@ -119,30 +143,6 @@ Bun.serve({
           return new Response("Unauthorized", { status: 401 });
         }
 
-        async function listFilesRecursive(path: string, user: string): Promise<any[]> {
-          const url = `${BUNNY_STORAGE_URL}${path}`;
-          const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
-          if (!res.ok) return [];
-          
-          const items = await res.json();
-          let allFiles: any[] = [];
-          
-          for (const item of items) {
-            if (item.IsDirectory) {
-              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`, user);
-              allFiles = allFiles.concat(subFiles);
-            } else {
-              allFiles.push({
-                ObjectName: path.replace(`/~${user}/`, '') + item.ObjectName,
-                Length: item.Length,
-                IsDirectory: false
-              });
-            }
-          }
-          
-          return allFiles;
-        }
-
         try {
           const files = await listFilesRecursive(`/~${username}/`, username);
           return new Response(JSON.stringify(files), { headers: { "Content-Type": "application/json" } });
@@ -176,49 +176,17 @@ Bun.serve({
     "/api/download-zip": {
       GET: async req => {
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (!token || !JWKS) return new Response("Unauthorized", { status: 401 });
-        
-        let username: string;
+        let username: string
         try {
-          const { payload } = await jwtVerify(token, JWKS);
-          username = payload.username as string;
-        } catch {
+          username = await getUsername(token);
+        } catch (err) {
           return new Response("Unauthorized", { status: 401 });
-        }
-
-        if (!BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
-          return new Response("Storage not configured", { status: 500 });
-        }
-
-        async function listFilesRecursive(path: string, user: string): Promise<any[]> {
-          const url = `${BUNNY_STORAGE_URL}${path}`;
-          const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
-          if (!res.ok) return [];
-          
-          const items = await res.json();
-          let allFiles: any[] = [];
-          
-          for (const item of items) {
-            if (item.IsDirectory) {
-              const subFiles = await listFilesRecursive(`${path}${item.ObjectName}/`, user);
-              allFiles = allFiles.concat(subFiles);
-            } else {
-              allFiles.push({
-                ObjectName: path.replace(`/~${user}/`, '') + item.ObjectName,
-                path: `${path}${item.ObjectName}`
-              });
-            }
-          }
-          
-          return allFiles;
         }
 
         try {
           const files = await listFilesRecursive(`/~${username}/`, username);
           
-          // Use Bun's built-in zip functionality
-          const { spawn } = Bun;
-          const proc = spawn(["sh", "-c", `cd /tmp && mkdir -p ${username} && cd ${username} && rm -rf * && mkdir -p \$(dirname "$1") 2>/dev/null || true`]);
+          const proc = Bun.spawn(["sh", "-c", `cd /tmp && mkdir -p ${username} && cd ${username} && rm -rf * && mkdir -p \$(dirname "$1") 2>/dev/null || true`]);
           await proc.exited;
           
           // Download all files to temp directory
