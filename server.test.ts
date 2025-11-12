@@ -4,7 +4,8 @@ import { startServer } from "./app";
 
 // --- Test Configuration ---
 
-const BASE_URL = "http://localhost:3000";
+const TEST_PORT = 3001;
+const BASE_URL = `http://localhost:${TEST_PORT}`;
 // THIS IS A TEST USER'S TOKEN, NOT A PRODUCTION TOKEN
 let authToken = process.env.TEST_AUTH_TOKEN || "test-token";
 let username = process.env.TEST_USERNAME || "testuser";
@@ -20,8 +21,7 @@ beforeAll(async () => {
     ...process.env,
     TEST_AUTH_TOKEN: authToken,
     TEST_USERNAME: username,
-  });
-  await Bun.sleep(50); // Wait for server to start
+  }, TEST_PORT);
 });
 
 

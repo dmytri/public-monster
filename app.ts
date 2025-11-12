@@ -4,7 +4,7 @@
 import { jwtVerify, createRemoteJWKSet } from "jose";
 
 // This function will be exported and can be started with custom env vars for testing
-export function startServer(env: NodeJS.ProcessEnv) {
+export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
   const HANKO_API_URL = env.HANKO_API_URL;
   const BUNNY_STORAGE_URL = env.BUNNY_STORAGE_URL;
   const BUNNY_API_KEY = env.BUNNY_API_KEY;
@@ -117,7 +117,7 @@ export function startServer(env: NodeJS.ProcessEnv) {
   console.log('~ public.monster')
   return Bun.serve({
     hostname: '0.0.0.0',
-    port: 3000,
+    port: port,
     async fetch(req: Request): Promise<Response> {
       const url = new URL(req.url);
 
