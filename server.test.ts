@@ -198,7 +198,7 @@ describe("API: Main", () => {
     form.append("path", "test.txt");
     await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
 
-    const res = await fetch(`${BASE_URL}/api/download-zip`, {
+    const res = await fetch(`${BASE_URL}/api/files/zip`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
 

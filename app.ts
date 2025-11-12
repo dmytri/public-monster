@@ -401,7 +401,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
 
       // API: Download all files as zip
-      "/api/download-zip": {
+      "/api/files/zip": {
         GET: async (req) => {
           const token = req.headers.get("Authorization")?.replace("Bearer ", "");
           if (!token) return new Response("Unauthorized", { status: 401 });
@@ -610,6 +610,103 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           return new Response("Not found", { status: 404 });
         }
         return new Response(file, { headers: { "Content-Type": "image/png" } });
+      },
+      
+      "/api/files/download/:path": async (req) => {
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!token) return new Response("Unauthorized", { status: 401 });
+        
+        let username: string;
+        try {
+          username = await getUsername(token);
+        } catch (err) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        const filePath = req.params.path;
+        
+        if (!filePath) {
+          return new Response("Bad request", { status: 400 });
+        }
+
+        try {
+          // Fetch the file from Bunny Storage
+          const res = await fetch(`${BUNNY_STORAGE_URL}/~${username}/${filePath}`, {
+            headers: { AccessKey: BUNNY_API_KEY }
+          });
+          
+          if (!res.ok) {
+            return new Response("File not found", { status: 404 });
+          }
+
+          // Get the file content
+          const fileContent = await res.arrayBuffer();
+          const fileBlob = new Blob([fileContent]);
+          
+          // Get the filename for the Content-Disposition header
+          const fileName = filePath.split('/').pop() || 'download';
+          
+          return new Response(fileBlob, {
+            status: 200,
+            headers: {
+              "Content-Disposition": `attachment; filename="${fileName}"`,
+              "Content-Type": "application/octet-stream", // or detect content type
+              ...res.headers // include original headers if needed
+            }
+          });
+        } catch (err) {
+          return new Response("Download failed", { status: 500 });
+        }
+      },
+      
+      // Dynamic route for individual file downloads
+      "/api/download/*": async (req) => {
+        const url = new URL(req.url);
+        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!token) return new Response("Unauthorized", { status: 401 });
+        
+        let username: string;
+        try {
+          username = await getUsername(token);
+        } catch (err) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        // Extract file path from URL: /api/download/filename or /api/download/dir/filename
+        const filePath = url.pathname.substring('/api/download/'.length);
+        
+        if (!filePath) {
+          return new Response("Bad request", { status: 400 });
+        }
+
+        try {
+          // Fetch the file from Bunny Storage
+          const res = await fetch(`${BUNNY_STORAGE_URL}/~${username}/${filePath}`, {
+            headers: { AccessKey: BUNNY_API_KEY }
+          });
+          
+          if (!res.ok) {
+            return new Response("File not found", { status: 404 });
+          }
+
+          // Get the file content
+          const fileContent = await res.arrayBuffer();
+          const fileBlob = new Blob([fileContent]);
+          
+          // Get the filename for the Content-Disposition header
+          const fileName = filePath.split('/').pop() || 'download';
+          
+          return new Response(fileBlob, {
+            status: 200,
+            headers: {
+              "Content-Disposition": `attachment; filename="${fileName}"`,
+              "Content-Type": "application/octet-stream", // or detect content type
+              ...res.headers // include original headers if needed
+            }
+          });
+        } catch (err) {
+          return new Response("Download failed", { status: 500 });
+        }
       }
     },
     // Fallback for unmatched routes
