@@ -257,12 +257,16 @@ document.getElementById('createStarter')?.addEventListener('click', async () => 
 // Make hankoToken available globally
 window.hankoToken = null;
 
-// Logout handler
+// Make hanko available globally for logout
+window.hanko = hanko;
+</script>
+<script>
+// Logout handler (separate script to access window.hanko)
 document.getElementById('logoutLink').addEventListener('click', async (e) => {
   e.preventDefault();
   if (window.hanko) {
     await window.hanko.user.logout();
-    window.location.href = '/';
+    window.location.reload();
   }
 });
 </script>
