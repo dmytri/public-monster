@@ -17,11 +17,18 @@ let server: Server;
 // --- Test Hooks ---
 
 beforeAll(async () => {
+  const testUserData = {
+    "test-token-old": { userid: "test-user-id-old", username: "testuser-old" },
+    "test-token-new": { userid: "test-user-id-new", username: "testuser-new" },
+  };
+
   server = startServer({
     ...process.env,
     TEST_AUTH_TOKEN: authToken,
     TEST_USERNAME: username,
+    TEST_USER_DATA: JSON.stringify(testUserData),
   }, TEST_PORT);
+  await Bun.sleep(50); // Wait for server to start
 });
 
 
@@ -202,10 +209,67 @@ describe("API: Main", () => {
   });
 });
 
-// Migration tests are skipped because they require two users and a more complex setup.
-// To run these tests, you would need to set up two test users and their corresponding tokens.
-describe.skip("API: Migration", () => {
-    // ...
+describe("API: Migration", () => {
+  const oldUsername = "testuser-old";
+  const newUsername = "testuser-new";
+  const oldAuthToken = "test-token-old";
+  const newAuthToken = "test-token-new";
+
+  const testUserData = {
+    [oldAuthToken]: { userid: "test-user-id-old", username: oldUsername },
+    [newAuthToken]: { userid: "test-user-id-new", username: newUsername },
+  };
+
+
+
+  test("handles full migration flow", async () => {
+    // 1. Populate old user's directory
+    const form = new FormData();
+    const fileContent = "migration test";
+    const filePath = "test.txt";
+    form.append("file", new Blob([fileContent]), filePath);
+    form.append("path", filePath);
+
+    await fetch(`${BASE_URL}/api/files`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${oldAuthToken}` },
+      body: form,
+    });
+
+    // 2. Prepare migration as the old user
+    const prepareRes = await fetch(`${BASE_URL}/api/prepare-migration`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${oldAuthToken}` },
+    });
+    expect(prepareRes.status).toBe(200);
+    const { token: migrationToken } = await prepareRes.json();
+    expect(migrationToken).toBeString();
+
+    // 3. Perform migration as the new user
+    const migrateRes = await fetch(`${BASE_URL}/api/migrate-username`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${newAuthToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ oldUsername, token: migrationToken }),
+    });
+    expect(migrateRes.status).toBe(200);
+
+    // 4. Verify file was moved to new user's directory
+    const newFilesRes = await fetch(`${BASE_URL}/api/files`, {
+      headers: { Authorization: `Bearer ${newAuthToken}` },
+    });
+    const newFiles = await newFilesRes.json();
+    expect(newFiles.find((f: any) => f.ObjectName === filePath)).toBeDefined();
+
+    // 5. Verify file was removed from old user's directory
+    const oldFilesRes = await fetch(`${BASE_URL}/api/files`, {
+      headers: { Authorization: `Bearer ${oldAuthToken}` },
+    });
+    const oldFiles = await oldFilesRes.json();
+    expect(oldFiles.find((f: any) => f.ObjectName === filePath)).toBeUndefined();
+  }, 20000); // Increase timeout to 20 seconds
 });
 
 test("404 handler", async () => {

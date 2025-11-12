@@ -60,6 +60,12 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
   ];
 
   async function getUserInfo(token: string) {
+    if (env.TEST_USER_DATA) {
+      const testUsers = JSON.parse(env.TEST_USER_DATA);
+      if (testUsers[token]) {
+        return testUsers[token];
+      }
+    }
     if (token === env.TEST_AUTH_TOKEN) {
       return { userid: "test-user-id", username: env.TEST_USERNAME || "testuser" };
     }
