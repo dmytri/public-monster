@@ -24,9 +24,7 @@ beforeAll(async () => {
   await Bun.sleep(50); // Wait for server to start
 });
 
-afterAll(() => {
-  server.stop(true);
-});
+
 
 // --- Helper Functions ---
 

@@ -471,6 +471,7 @@ export function startServer(env: NodeJS.ProcessEnv) {
       else if (url.pathname === '/faq') staticResponse = await serveStatic("faq.html");
       else if (url.pathname === '/public_html') staticResponse = await serveStatic("filemanager.html");
       else if (url.pathname === '/profile') staticResponse = await serveStatic("profile.html");
+      else if (url.pathname === '/404') staticResponse = await serveStatic("404.html");
       else if (url.pathname === '/social-card.png') return new Response(Bun.file("social-card.png"));
 
       if (staticResponse) return staticResponse;
