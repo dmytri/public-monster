@@ -1,61 +1,218 @@
-import { test, expect, beforeAll, afterAll } from "bun:test";
-import { spawn } from "bun";
-import { mkdir, writeFile } from "node:fs/promises";
+import { test, expect, beforeAll, afterAll, describe, beforeEach } from "bun:test";
+import type { Server } from "bun";
+import { startServer } from "./app";
 
-let server: any;
-const BASE = "http://localhost:3000";
+// --- Test Configuration ---
+
+const BASE_URL = "http://localhost:3000";
+// THIS IS A TEST USER'S TOKEN, NOT A PRODUCTION TOKEN
+let authToken = process.env.TEST_AUTH_TOKEN || "test-token";
+let username = process.env.TEST_USERNAME || "testuser";
+
+
+
+let server: Server;
+
+// --- Test Hooks ---
 
 beforeAll(async () => {
-  server = spawn([process.execPath, "server.ts"], { env: { ...process.env, PUBLIC_DIR: "/tmp/test_public" } });
-  await Bun.sleep(1000);
-  await mkdir("/tmp/test_public/testuser", { recursive: true });
-  await writeFile("/tmp/test_public/testuser/index.html", "<h1>Test</h1>");
-  await writeFile("/tmp/test_public/testuser/style.css", "body{color:red}");
+  server = startServer({
+    ...process.env,
+    TEST_AUTH_TOKEN: authToken,
+    TEST_USERNAME: username,
+  });
+  await Bun.sleep(50); // Wait for server to start
 });
 
-afterAll(() => server.kill());
+afterAll(() => {
+  server.stop(true);
+});
 
-test("serves homepage", async () => {
-  const res = await fetch(BASE);
+// --- Helper Functions ---
+
+async function cleanup() {
+    if (!authToken) return;
+    const res = await fetch(`${BASE_URL}/api/files`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) return;
+    const files = await res.json();
+    for (const file of files) {
+        await fetch(`${BASE_URL}/api/files`, {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${authToken}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ path: file.ObjectName }),
+        });
+    }
+}
+
+beforeEach(async () => {
+    await cleanup();
+});
+
+afterAll(async () => {
+    await cleanup();
+    await Bun.sleep(1000);
+    server.stop(true);
+});
+
+
+// --- Test Cases ---
+
+test("GET / - serves homepage", async () => {
+  const res = await fetch(BASE_URL);
   expect(res.status).toBe(200);
-  expect(await res.text()).toContain("public.monster");
+  const text = await res.text();
+  expect(text).toContain("public.monster");
+  expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
 });
 
-test("redirects /~user to /~user/", async () => {
-  const res = await fetch(`${BASE}/~testuser`, { redirect: "manual" });
-  expect(res.status).toBe(301);
-  expect(res.headers.get("location")).toBe("/~testuser/");
+test("GET /public_html - serves file manager with env var replaced", async () => {
+    const res = await fetch(`${BASE_URL}/public_html`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
 });
 
-test("serves user files", async () => {
-  const res = await fetch(`${BASE}/~testuser/index.html`);
-  expect(res.status).toBe(200);
-  expect(await res.text()).toContain("Test");
+test("GET /~username/path - redirects to CDN pull zone", async () => {
+  if (!username) return;
+  const res = await fetch(`${BASE_URL}/~${username}/index.html`, { redirect: "manual" });
+  expect(res.status).toBe(303);
+  expect(res.headers.get("location")).toContain(`/~${username}/index.html`);
 });
 
-test("serves CSS with correct content-type", async () => {
-  const res = await fetch(`${BASE}/~testuser/style.css`);
-  expect(res.status).toBe(200);
-  expect(res.headers.get("content-type")).toBe("text/css");
+describe("API: Main", () => {
+  test("POST /api/files - fails without auth", async () => {
+    const form = new FormData();
+    form.append("file", new Blob(["test"]), "test.txt");
+    form.append("path", "test.txt");
+    const res = await fetch(`${BASE_URL}/api/files`, { method: "POST", body: form });
+    expect(res.status).toBe(401);
+  });
+
+  test("POST /api/files - uploads a file with auth", async () => {
+    if (!authToken) return;
+    const form = new FormData();
+    const fileContent = "hello world";
+    const filePath = "test.txt";
+    form.append("file", new Blob([fileContent]), filePath);
+    form.append("path", filePath);
+
+    const res = await fetch(`${BASE_URL}/api/files`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: form,
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/files - rejects disallowed file type", async () => {
+    if (!authToken) return;
+    const form = new FormData();
+    form.append("file", new Blob(["<script>alert(1)</script>"]), "danger.exe");
+    form.append("path", "danger.exe");
+
+    const res = await fetch(`${BASE_URL}/api/files`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: form,
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe("File type not allowed");
+  });
+
+  test("GET /api/files - lists files for authenticated user", async () => {
+    if (!authToken) return;
+    // Upload a file first
+    const form = new FormData();
+    form.append("file", new Blob(["test"]), "test.txt");
+    form.append("path", "test.txt");
+    await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
+
+    const res = await fetch(`${BASE_URL}/api/files`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(res.status).toBe(200);
+    const files = await res.json();
+    expect(files.length).toBe(1);
+    expect(files[0].ObjectName).toBe("test.txt");
+  }, 10000); // Increase timeout to 10 seconds
+
+  test("DELETE /api/files - deletes a file", async () => {
+    if (!authToken) return;
+    // Upload a file first
+    const form = new FormData();
+    const filePath = "to-be-deleted.txt";
+    form.append("file", new Blob(["delete me"]), filePath);
+    form.append("path", filePath);
+    await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
+
+    const res = await fetch(`${BASE_URL}/api/files`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path: filePath }),
+    });
+
+    expect(res.status).toBe(200);
+
+    // Verify file is deleted
+    const listRes = await fetch(`${BASE_URL}/api/files`, { headers: { Authorization: `Bearer ${authToken}` } });
+    const files = await listRes.json();
+    expect(files.find((f:any) => f.ObjectName === filePath)).toBeUndefined();
+  }, 10000); // Increase timeout to 10 seconds
+
+  test("POST /api/create-starter - creates a starter index.html", async () => {
+    if (!authToken) return;
+    const res = await fetch(`${BASE_URL}/api/create-starter`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(res.status).toBe(200);
+
+    // Verify file is created
+    const listRes = await fetch(`${BASE_URL}/api/files`, { headers: { Authorization: `Bearer ${authToken}` } });
+    const files = await listRes.json();
+    expect(files.find((f:any) => f.ObjectName === "index.html")).toBeDefined();
+  });
+
+  test("GET /api/download-zip - returns a zip file", async () => {
+    if (!authToken) return;
+    // Upload a file first
+    const form = new FormData();
+    form.append("file", new Blob(["test"]), "test.txt");
+    form.append("path", "test.txt");
+    await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
+
+    const res = await fetch(`${BASE_URL}/api/download-zip`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/zip");
+    const blob = await res.blob();
+    expect(blob.size).toBeGreaterThan(100);
+  });
 });
 
-test("returns 404 for missing files", async () => {
-  const res = await fetch(`${BASE}/~testuser/missing.html`);
-  expect(res.status).toBe(404);
+// Migration tests are skipped because they require two users and a more complex setup.
+// To run these tests, you would need to set up two test users and their corresponding tokens.
+describe.skip("API: Migration", () => {
+    // ...
 });
 
-test("uploads file without auth (demo mode)", async () => {
-  const form = new FormData();
-  form.append("file", new Blob(["test content"]), "test.txt");
-  form.append("path", "uploaded.txt");
-  const res = await fetch(`${BASE}/upload`, { method: "POST", body: form });
-  expect(res.status).toBe(200);
-});
-
-test("uploads nested file", async () => {
-  const form = new FormData();
-  form.append("file", new Blob(["nested"]), "nested.html");
-  form.append("path", "sub/dir/nested.html");
-  const res = await fetch(`${BASE}/upload`, { method: "POST", body: form });
-  expect(res.status).toBe(200);
+test("404 handler", async () => {
+    const res = await fetch(`${BASE_URL}/this-page-does-not-exist`);
+    expect(res.status).toBe(404);
+    const text = await res.text();
+    expect(text).toContain("PAGE NOT FOUND");
 });
