@@ -117,12 +117,12 @@ a{color:#00f;text-decoration:underline}
 <div id="upload">
 <h2>Upload Your Site</h2>
 <form id="uploadForm" aria-label="Upload files">
-<label for="files">Files: <input id="files" type="file" multiple></label><br>
-<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label><br>
+<label for="files">Files: <input id="files" type="file" multiple></label> <button type="button" id="clearFiles" style="font-size:0.9em;display:none">🗑️ clear</button><br>
+<label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label> <button type="button" id="clearFolder" style="font-size:0.9em;display:none">🗑️ clear</button><br>
 <label for="flattenFolder"><input id="flattenFolder" type="checkbox"> Upload folder contents to root (strip folder name)</label>
 <p>⚠️ <strong>Important: index.html</strong> must be in the root, NOT in a subfolder! <strong>Read this!</strong>: <a href="/faq">FAQ</a></p>
 <p><strong>File size limit:</strong> 5MB per file</p>
-<button type="submit" id="btn">🚀 Upload</button> <button type="button" id="clearBtn" style="font-size:0.9em">🗑️ clear files</button>
+<button type="submit" id="btn">🚀 Upload</button>
 <p id="status"></p>
 </form>
 <p id="starterSection" style="display:none">
@@ -138,11 +138,26 @@ const status = document.getElementById('status');
 const filesInput = document.getElementById('files');
 const folderInput = document.getElementById('folder');
 
-// Clear file selections
-document.getElementById('clearBtn').addEventListener('click', () => {
+// Show/hide clear buttons and handle clearing
+const clearFilesBtn = document.getElementById('clearFiles');
+const clearFolderBtn = document.getElementById('clearFolder');
+
+filesInput.addEventListener('change', () => {
+  clearFilesBtn.style.display = filesInput.files.length > 0 ? 'inline' : 'none';
+});
+
+folderInput.addEventListener('change', () => {
+  clearFolderBtn.style.display = folderInput.files.length > 0 ? 'inline' : 'none';
+});
+
+clearFilesBtn.addEventListener('click', () => {
   filesInput.value = '';
+  clearFilesBtn.style.display = 'none';
+});
+
+clearFolderBtn.addEventListener('click', () => {
   folderInput.value = '';
-  status.textContent = '';
+  clearFolderBtn.style.display = 'none';
 });
 
 form.addEventListener('submit', async (e) => {
