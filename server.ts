@@ -515,7 +515,7 @@ Bun.serve({
     
     <div class="box">
       <p><strong>✏️ How to edit:</strong></p>
-      <p>1. Go to <a href="https://public.monster/filemanager">File Manager</a><br>
+      <p>1. Go to <a href="https://public.monster/public_html">public_html</a><br>
       2. Download <code>index.html</code><br>
       3. Edit it with any text editor<br>
       4. Upload it back</p>
@@ -563,7 +563,7 @@ Bun.serve({
       const file = Bun.file("faq.html");
       return new Response(file, { headers: { "Content-Type": "text/html" } });
     },
-    "/filemanager": async () => {
+    "/public_html": async () => {
       const html = await Bun.file("filemanager.html").text();
       const withEnv = html.replace('HANKO_API_URL_PLACEHOLDER', HANKO_API_URL || '');
       return new Response(withEnv, { headers: { "Content-Type": "text/html" } });
