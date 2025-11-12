@@ -43,6 +43,17 @@ let hankoToken = null;
 
 const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
 
+document.getElementById("logout-link")
+  .addEventListener("click", (event) => {
+      event.preventDefault();
+      hanko.user.logout();
+  });
+
+hanko.onUserLoggedOut(() => {
+  // successfully logged out, redirect to a page in your application
+  document.location.href = "/"
+})
+
 const showAuth = () => {
   document.getElementById('auth').style.display = 'block';
   document.getElementById('upload').style.display = 'none';
@@ -130,7 +141,7 @@ a{color:#00f;text-decoration:underline}
 <span id="starterStatus"></span>
 </p>
 <p><strong>Your site:</strong> <a href="#" id="link"></a></p>
-<p><a href="/public_html">📁 public_html</a> | <a href="/profile">👤 Profile</a> | <a href="#" id="logoutLink">🚪 Log out</a></p>
+<p><a href="/public_html">📁 public_html</a> | <a href="/profile">👤 Profile</a> | <a href="#" id="logout-link">🚪 Log out</a></p>
 </div>
 <script>
 const form = document.getElementById('uploadForm');
@@ -254,21 +265,8 @@ document.getElementById('createStarter')?.addEventListener('click', async () => 
   }
 });
 
-// Make hankoToken available globally
 window.hankoToken = null;
 
-// Make hanko available globally for logout
-window.hanko = hanko;
-</script>
-<script>
-// Logout handler (separate script to access window.hanko)
-document.getElementById('logoutLink').addEventListener('click', async (e) => {
-  e.preventDefault();
-  if (window.hanko) {
-    await window.hanko.user.logout();
-    window.location.reload();
-  }
-});
 </script>
 <div class="construction">
 🚧 Under Construction 🚧
