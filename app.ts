@@ -455,26 +455,35 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 
           try {
             const files = await listFilesRecursive(`/~${username}/`, username);
+            console.log(`Found ${files.length} files to zip for user ${username}`);
 
             const proc = Bun.spawn(["sh", "-c", `cd /tmp && mkdir -p ${username} && cd ${username} && rm -rf *`]);
             await proc.exited;
 
             for (const file of files) {
-              const res = await fetch(`${BUNNY_STORAGE_URL}${file.path}`, { headers: { AccessKey: BUNNY_API_KEY } });
+              console.log(`Processing file: ${file.ObjectName}`);
+              const res = await fetch(`${BUNNY_STORAGE_URL}/~${username}/${file.ObjectName}`, { headers: { AccessKey: BUNNY_API_KEY } });
               if (res.ok) {
                 const data = await res.arrayBuffer();
                 const filePath = `/tmp/${username}/${file.ObjectName}`;
+                console.log(`Writing file to: ${filePath}`);
                 const dir = filePath.substring(0, filePath.lastIndexOf('/'));
                 if (dir) {
                   const mkdirProc = Bun.spawn(["mkdir", "-p", dir]);
                   await mkdirProc.exited;
                 }
                 await Bun.write(filePath, data);
+              } else {
+                console.log(`Failed to fetch file: ${file.ObjectName}`);
               }
             }
 
             const zipProc = Bun.spawn(["sh", "-c", `cd /tmp && zip -r ${username}.zip ${username}`]);
             await zipProc.exited;
+            const stdout = await new Response(zipProc.stdout).text();
+            const stderr = await new Response(zipProc.stderr).text();
+            console.log('zip stdout:', stdout);
+            console.log('zip stderr:', stderr);
 
             const zipFile = Bun.file(`/tmp/${username}.zip`);
 

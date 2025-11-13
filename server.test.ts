@@ -169,6 +169,9 @@ describe("API: Main", () => {
 
     expect(res.status).toBe(200);
 
+    // Add a small delay to allow for the deletion to propagate
+    await Bun.sleep(100);
+
     // Verify file is deleted
     const listRes = await fetch(`${BASE_URL}/api/files`, { headers: { Authorization: `Bearer ${authToken}` } });
     const files = await listRes.json();
@@ -190,7 +193,7 @@ describe("API: Main", () => {
     expect(files.find((f:any) => f.ObjectName === "index.html")).toBeDefined();
   });
 
-  test("GET /api/download-zip - returns a zip file", async () => {
+  test("GET /api/files/zip - returns a zip file", async () => {
     if (!authToken) return;
     // Upload a file first
     const form = new FormData();

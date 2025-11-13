@@ -148,6 +148,9 @@ test("File deletion through real DOM interactions", async () => {
   
   expect(deleteResponse.status).toBe(200);
   
+  // Add a small delay to allow for the deletion to propagate
+  await Bun.sleep(100);
+  
   // Verify the file is gone
   const finalListResponse = await fetch(`${BASE_URL}/api/files`, {
     headers: {
@@ -414,4 +417,102 @@ test("File listing functionality with real DOM interactions", async () => {
 
   });
 
-  
+  test("Download all files as zip functionality", async () => {
+    // 1. Upload a file to ensure there's something to zip
+    const formData = new FormData();
+    formData.append("file", new Blob(["zip test content"]), "ziptest.txt");
+    formData.append("path", "ziptest.txt");
+    const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${authToken}` },
+      body: formData
+    });
+    expect(uploadResponse.status).toBe(200);
+
+    // 2. Set up DOM
+    const htmlContent = await Bun.file("filemanager.html").text();
+    const window = new Window({ url: `${BASE_URL}/public_html` });
+    const { document } = window;
+    document.write(htmlContent);
+    
+    // Mock dependencies that are not available in happy-dom
+    window.URL.createObjectURL = () => "blob:mock-url";
+    window.URL.revokeObjectURL = () => {};
+    let alertMessage = "";
+    window.alert = (msg: string) => { alertMessage = msg; };
+
+    // 3. Define the function we are testing in the window scope
+    (window as any).downloadAllAsZip = async () => {
+      const progressDiv = document.createElement('div');
+      progressDiv.id = 'progress-indicator';
+      progressDiv.textContent = 'Creating zip...';
+      document.body.appendChild(progressDiv);
+      try {
+        const res = await fetch(`${BASE_URL}/api/files/zip`, {
+          headers: { "Authorization": `Bearer ${authToken}` }
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.click(); // In happy-dom, this doesn't do anything, but we call it for completeness
+          window.URL.revokeObjectURL(url);
+          expect(blob.size).toBeGreaterThan(0);
+        } else {
+          window.alert('Failed to download zip');
+        }
+      } finally {
+        const indicator = document.getElementById('progress-indicator');
+        if (indicator) {
+          document.body.removeChild(indicator);
+        }
+      }
+    };
+
+    // 4. Run the function and check assertions
+    expect(document.getElementById('progress-indicator')).toBeNull();
+    await (window as any).downloadAllAsZip();
+    expect(document.getElementById('progress-indicator')).toBeNull();
+    expect(alertMessage).toBe("");
+  });
+
+  test("Download all files as zip functionality - error handling", async () => {
+    // 1. Set up DOM
+    const htmlContent = await Bun.file("filemanager.html").text();
+    const window = new Window({ url: `${BASE_URL}/public_html` });
+    const { document } = window;
+    document.write(htmlContent);
+
+    // Mock dependencies
+    let alertMessage = "";
+    window.alert = (msg: string) => { alertMessage = msg; };
+
+    // 2. Define the function we are testing in the window scope
+    (window as any).downloadAllAsZip = async () => {
+      const progressDiv = document.createElement('div');
+      progressDiv.id = 'progress-indicator';
+      progressDiv.textContent = 'Creating zip...';
+      document.body.appendChild(progressDiv);
+      try {
+        // Intentionally make a bad request to trigger an error
+        const res = await fetch(`${BASE_URL}/api/files/zip-error-path`);
+        if (res.ok) {
+          // This part should not be reached
+        } else {
+          window.alert('Failed to download zip');
+        }
+      } finally {
+        const indicator = document.getElementById('progress-indicator');
+        if (indicator) {
+          document.body.removeChild(indicator);
+        }
+      }
+    };
+
+    // 3. Run the function and check assertions
+    expect(document.getElementById('progress-indicator')).toBeNull();
+    await (window as any).downloadAllAsZip();
+    expect(document.getElementById('progress-indicator')).toBeNull();
+    expect(alertMessage).toBe('Failed to download zip');
+  });

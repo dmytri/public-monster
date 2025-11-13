@@ -278,23 +278,43 @@ function renderTree(files, token) {
 }
 
 async function downloadAllAsZip(files, token) {
-  const link = document.createElement('a');
-  link.href = '/api/download-zip';
-  link.download = `${username}.zip`;
-  
-  // Add auth token as we can't set headers on <a> download
-  const res = await fetch('/api/download-zip', {
-    credentials: 'include'
-  });
-  
-  if (res.ok) {
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  } else {
-    alert('Failed to download zip');
+  // Create and show progress indicator
+  const progressDiv = document.createElement('div');
+  progressDiv.id = 'progress-indicator';
+  progressDiv.style.position = 'fixed';
+  progressDiv.style.top = '50%';
+  progressDiv.style.left = '50%';
+  progressDiv.style.transform = 'translate(-50%, -50%)';
+  progressDiv.style.background = '#c0c0c0';
+  progressDiv.style.border = '4px outset #fff';
+  progressDiv.style.padding = '20px';
+  progressDiv.style.zIndex = '10000';
+  progressDiv.textContent = 'Creating zip...';
+  document.body.appendChild(progressDiv);
+
+  try {
+    const link = document.createElement('a');
+    link.href = '/api/files/zip';
+    link.download = `${username}.zip`;
+
+    const res = await fetch('/api/files/zip', {
+      credentials: 'include'
+    });
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } else {
+      alert('Failed to download zip');
+    }
+  } finally {
+    // Hide and remove progress indicator
+    if (document.getElementById('progress-indicator')) {
+      document.body.removeChild(progressDiv);
+    }
   }
 }
 
