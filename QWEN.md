@@ -16,3 +16,4 @@
 - Use `bun run` instead of `npm run` for scripts
 - Do not use `tsc`, `npm install`, `yarn install`, or similar commands unless specifically instructed
 - The project uses Bun's native TypeScript support
+- To verify the project functionality, run the tests with `bun test` - there's no need to manually start the server as comprehensive tests cover all functionality
