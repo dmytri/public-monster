@@ -107,7 +107,6 @@ input,button{font-family:inherit;font-size:1em;margin:5px}
 button{background:#c0c0c0;border:2px outset #fff;padding:5px 15px;cursor:pointer}
 button:active{border-style:inset}
 a{color:#00f;text-decoration:underline}
-.blink{font-size:2em;animation:blink 1.5s infinite}
 @keyframes blink{50%{opacity:0}}
 #auth{display:block}
 #upload{display:none}
@@ -120,13 +119,26 @@ a{color:#00f;text-decoration:underline}
 <main role="main">
 <div class="beta-badge">BETA</div>
 <h1>🌐 Welcome to public.monster! 🌐</h1>
+<div style="background:yellow;border:2px dashed red;padding:10px;text-align:center;margin:10px 0;">
+  <p style="margin:5px 0;"><strong>😎 AN HOMAGE TO 90s ~/PUBLIC_HTML HOSTING</strong></p>
+  <p style="margin:5px 0;font-style:italic;">Remember when the web was FUN?! 🌈</p>
+</div>
+<div style="background:#FFB6C1;border:3px ridge #000;text-align:center;padding:10px;margin:5px 0;">
+  <h3 style="margin-top:0;color:#FF00FF;text-shadow:1px 1px 0 #000;">✨ BEST VIEWED WITH BROWSER ✨</h3>
+  <marquee style="background:#008080;color:white;">Welcome to the coolest place on the World Wide Web! Make your own site today!</marquee>
+</div>
 <div id="auth">
-<p class="blink">⚡ Your personal corner of the web! ⚡</p>
 <h2>Login / Sign Up</h2>
 <hanko-auth mode="registration"></hanko-auth>
+<p style="text-align:center;background:#98FB98;border:2px groove #000;padding:8px;margin:10px 0;">
+  <strong>New Here?</strong> Check out our <a href="/about" style="color:#4B0082;text-decoration:underline;font-weight:bold;">About Page</a> and <a href="/faq" style="color:#4B0082;text-decoration:underline;font-weight:bold;">FAQ</a> for cool tips!
+</p>
 </div>
 <div id="upload">
 <h2>Upload Your Site</h2>
+<p style="text-align:center;background:#98FB98;border:2px groove #000;padding:8px;margin:10px 0;">
+  <strong>First Time?</strong> Read our <a href="/about" style="color:#4B0082;text-decoration:underline;font-weight:bold;">About Page</a> and <a href="/faq" style="color:#4B0082;text-decoration:underline;font-weight:bold;">FAQ</a> for cool tips!
+</p>
 <form id="uploadForm" aria-label="Upload files">
 <label for="files">Files: <input id="files" type="file" multiple></label> <button type="button" id="clearFiles" style="font-size:0.9em;display:none">clear</button><br>
 <label for="folder">Folder: <input id="folder" type="file" webkitdirectory></label> <button type="button" id="clearFolder" style="font-size:0.9em;display:none">clear</button><br>
@@ -288,9 +300,9 @@ window.hankoToken = null;
 <div class="construction">
 🚧 Under Construction 🚧
 </div>
-<footer style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px groove #999;font-size:0.9em">
-by <a href="/~dmytri" rel="noopener">~dmytri</a> &nbsp;|&nbsp; <a href="/about">about</a> &nbsp;|&nbsp; <a href="/faq">faq</a><br>
-Last updated: Monday, September 11759, 1993
+<footer style="text-align:center;border-top:2px groove #999;font-size:0.9em">
+<p>by <a href="/~dmytri" rel="noopener">~dmytri</a><p>
+Last updated: Monday, September 11761, 1993
 </footer>
 </main>
 </body>

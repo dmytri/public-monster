@@ -18,3 +18,8 @@
 - Do not use `tsc`, `npm install`, `yarn install`, or similar commands unless specifically instructed
 - The project uses Bun's native TypeScript support
 - To verify the project functionality, run the tests with `bun test` - there's no need to manually start the server as comprehensive tests cover all functionality
+
+## Important Clarification
+
+- **Do not modify any code unless explicitly instructed by the user** - Even if you notice changes that appear to be unintentional, do not revert or fix them unless the user specifically requests it
+- The user may be making their own edits to the codebase that you are not aware of, so always confirm before making additional changes
