@@ -8,4 +8,4 @@ RUN apk add zip
 RUN bun install --production
 
 EXPOSE 3000
-CMD ["bun", "server.ts"]
+CMD ["bun", "run", "src/server.ts"]

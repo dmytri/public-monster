@@ -1,7 +1,7 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { Window } from "happy-dom";
 import type { Server } from "bun";
-import { startServer } from "./app";
+import { startServer } from "../src/app";
 
 // --- Test Configuration ---
 const TEST_PORT = 3002;
@@ -34,7 +34,7 @@ afterAll(async () => {
 // --- E2E Tests ---
 test("File upload and listing through real DOM interactions", async () => {
   // Load filemanager.html content
-  const htmlContent = await Bun.file("filemanager.html").text();
+  const htmlContent = await Bun.file("./public/filemanager.html").text();
   
   // Create a DOM environment for the HTML content using happy-dom
   const window = new Window({
@@ -188,7 +188,7 @@ test("Create starter page functionality", async () => {
 
 // Test that the HTML pages load correctly and contain expected elements
 test("filemanager.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("filemanager.html").text();
+  const htmlContent = await Bun.file("./public/filemanager.html").text();
   
   const window = new Window({
     url: `${BASE_URL}/public_html`
@@ -212,7 +212,7 @@ test("filemanager.html loads with expected DOM structure", async () => {
 });
 
 test("404.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("404.html").text();
+  const htmlContent = await Bun.file("./public/404.html").text();
   
   const window = new Window({
     url: `${BASE_URL}/404`
@@ -267,7 +267,7 @@ test("File listing functionality with real DOM interactions", async () => {
 
   test("Clear buttons on upload form work correctly", async () => {
 
-    const htmlContent = await Bun.file("index.html").text();
+    const htmlContent = await Bun.file("./public/index.html").text();
 
     const window = new Window({ url: BASE_URL });
 
@@ -430,7 +430,7 @@ test("File listing functionality with real DOM interactions", async () => {
     expect(uploadResponse.status).toBe(200);
 
     // 2. Set up DOM
-    const htmlContent = await Bun.file("filemanager.html").text();
+    const htmlContent = await Bun.file("./public/filemanager.html").text();
     const window = new Window({ url: `${BASE_URL}/public_html` });
     const { document } = window;
     document.write(htmlContent);
@@ -479,7 +479,7 @@ test("File listing functionality with real DOM interactions", async () => {
 
   test("Download all files as zip functionality - error handling", async () => {
     // 1. Set up DOM
-    const htmlContent = await Bun.file("filemanager.html").text();
+    const htmlContent = await Bun.file("./public/filemanager.html").text();
     const window = new Window({ url: `${BASE_URL}/public_html` });
     const { document } = window;
     document.write(htmlContent);

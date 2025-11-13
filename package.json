@@ -1,5 +1,12 @@
 {
   "name": "public-monster",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "dev": "bun run --hot src/server.ts",
+    "test": "bun test",
+    "test:server": "bun test tests/server.test.ts",
+    "test:e2e": "bun test tests/e2e.test.ts"
+  },
   "dependencies": {
     "@teamhanko/hanko-elements": "^1.0.0",
     "jose": "^6.1.0"

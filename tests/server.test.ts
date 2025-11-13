@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll, describe, beforeEach } from "bun:test";
 import type { Server } from "bun";
-import { startServer } from "./app";
+import { startServer } from "../src/app";
 
 // --- Test Configuration ---
 

@@ -330,97 +330,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
             return new Response("Unauthorized", { status: 401 });
           }
 
-          const starterHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="preconnect" href="https://fonts.bunny.net">
-  <link href="https://fonts.bunny.net/css?family=comic-neue:400,700" rel="stylesheet">
-  <title>~${username} on public.monster</title>
-  <style>
-    body {
-      background-image: repeating-linear-gradient(45deg, #008080 0px, #008080 20px, #ff00ff 20px, #ff00ff 40px);
-      font-family: "Comic Neue", "Comic Sans MS", cursive;
-      color: #ffff00;
-      text-align: center;
-      padding: 20px;
-    }
-    
-    main {
-      background: #000;
-      border: 5px ridge #ff00ff;
-      padding: 40px;
-      max-width: 600px;
-      margin: 40px auto;
-      box-shadow: 10px 10px 0 rgba(255, 0, 255, 0.5);
-    }
-    
-    h1 {
-      color: #ffff00;
-      font-size: 2.5em;
-      text-shadow: 3px 3px 0 #ff00ff, 6px 6px 0 #00ffff;
-      margin: 0 0 20px 0;
-    }
-    
-    p {
-      font-size: 1.1em;
-      line-height: 1.6;
-      margin: 15px 0;
-    }
-    
-    a {
-      color: #00ff00;
-      text-decoration: none;
-      font-weight: bold;
-    }
-    
-    a:hover {
-      color: #ffff00;
-      text-decoration: underline;
-    }
-    
-    .box {
-      background: #000;
-      border: 3px solid #00ffff;
-      padding: 20px;
-      margin: 20px 0;
-      text-align: left;
-    }
-    
-    code {
-      background: #ff00ff;
-      color: #fff;
-      padding: 2px 6px;
-      font-family: monospace;
-    }
-    
-    strong {
-      color: #00ffff;
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>🌐 Welcome to ~${username}!</h1>
-    <p><strong>You're live on the web!</strong> This is your starter page. Download it, edit it, make it yours.</p>
-    <div class="box">
-      <p><strong>✏️ How to edit:</strong></p>
-      <p>1. Go to <a href="https://public.monster/public_html">public_html</a><br>
-      2. Download <code>index.html</code><br>
-      3. Edit it with any text editor<br>
-      4. Upload it back</p>
-    </div>
-    <div class="box">
-      <p><strong>💡 Tips:</strong></p>
-      <p>• HTML is just text with tags like <code>&lt;p&gt;</code> and <code>&lt;a&gt;</code><br>
-      • Check the <a href="https://public.monster/faq">FAQ</a> for help with links and images</p>
-    </div>
-    <p>🚧 <em>Under construction since ${new Date().getFullYear()}</em> 🚧</p>
-    <p><a href="https://public.monster">← public.monster</a></p>
-  </main>
-</body>
-</html>`;
+          // Read the starter HTML template from public/starter.html
+          const file = Bun.file("./public/starter.html");
+          if (!await file.exists()) {
+            return new Response("Starter template not found", { status: 500 });
+          }
+          let starterHTML = await file.text();
+
+          // Replace placeholders with actual values
+          starterHTML = starterHTML.replace(/USERNAME_PLACEHOLDER/g, username);
+          starterHTML = starterHTML.replace(/CURRENT_YEAR_PLACEHOLDER/g, new Date().getFullYear().toString());
 
           try {
             const uploadUrl = `${BUNNY_STORAGE_URL}/~${username}/index.html`;
@@ -599,7 +518,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 
       // Static routes
       "/": async () => {
-        const file = Bun.file("index.html");
+        const file = Bun.file("./public/index.html");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -609,7 +528,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/about": async () => {
-        const file = Bun.file("about.html");
+        const file = Bun.file("./public/about.html");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -619,7 +538,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/faq": async () => {
-        const file = Bun.file("faq.html");
+        const file = Bun.file("./public/faq.html");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -629,7 +548,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/public_html": async () => {
-        const file = Bun.file("filemanager.html");
+        const file = Bun.file("./public/filemanager.html");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -639,7 +558,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/profile": async () => {
-        const file = Bun.file("profile.html");
+        const file = Bun.file("./public/profile.html");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -649,7 +568,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/404": async () => {
-        const file = Bun.file("404.html");
+        const file = Bun.file("./public/404.html");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -659,7 +578,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/social-card.png": async () => {
-        const file = Bun.file("social-card.png");
+        const file = Bun.file("./public/social-card.png");
         if (!await file.exists()) {
           return new Response("Not found", { status: 404 });
         }
@@ -788,7 +707,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       }
 
       console.log('Serving 404 page for unmatched route:', url.pathname);
-      const file = Bun.file("404.html");
+      const file = Bun.file("./public/404.html");
       if (!await file.exists()) {
         return new Response("Page not found", { status: 404 });
       }
