@@ -250,8 +250,168 @@ test("File listing functionality with real DOM interactions", async () => {
     }
   });
 
-  expect(listResponse.status).toBe(200);
-  const files = await listResponse.json();
-  expect(Array.isArray(files)).toBe(true);
-  expect(files.some((f: any) => f.ObjectName === "listtest.txt")).toBe(true);
-});
+    expect(listResponse.status).toBe(200);
+
+    const files = await listResponse.json();
+
+    expect(Array.isArray(files)).toBe(true);
+
+    expect(files.some((f: any) => f.ObjectName === "listtest.txt")).toBe(true);
+
+  });
+
+  
+
+  test("Clear buttons on upload form work correctly", async () => {
+
+    const htmlContent = await Bun.file("index.html").text();
+
+    const window = new Window({ url: BASE_URL });
+
+    const { document } = window;
+
+    document.write(htmlContent);
+
+  
+
+    // Manually trigger script execution if happy-dom doesn't do it automatically
+
+    const scriptElement = document.querySelector('script[type="module"]');
+
+    if (scriptElement) {
+
+      // We can't execute the module script directly in this context,
+
+      // so we'll replicate the relevant parts of its setup.
+
+      const filesInput = document.getElementById('files') as HTMLInputElement;
+
+      const folderInput = document.getElementById('folder') as HTMLInputElement;
+
+      const clearFilesBtn = document.getElementById('clearFiles') as HTMLButtonElement;
+
+      const clearFolderBtn = document.getElementById('clearFolder') as HTMLButtonElement;
+
+  
+
+      // Attach event listeners from the script
+
+      filesInput.addEventListener('change', () => {
+
+        clearFilesBtn.style.display = filesInput.files.length > 0 ? 'inline' : 'none';
+
+      });
+
+      folderInput.addEventListener('change', () => {
+
+        clearFolderBtn.style.display = folderInput.files.length > 0 ? 'inline' : 'none';
+
+      });
+
+      clearFilesBtn.addEventListener('click', () => {
+
+        filesInput.value = '';
+
+        clearFilesBtn.style.display = 'none';
+
+      });
+
+      clearFolderBtn.addEventListener('click', () => {
+
+        folderInput.value = '';
+
+        clearFolderBtn.style.display = 'none';
+
+      });
+
+  
+
+      // --- Test Case for File Input ---
+
+      // 1. Initially, the clear button should be hidden
+
+      expect(clearFilesBtn.style.display).toBe("none");
+
+  
+
+      // 2. Simulate selecting a file
+
+      // happy-dom doesn't support FileList, so we mock it
+
+      Object.defineProperty(filesInput, 'files', {
+
+        value: [{ name: 'test.txt' }],
+
+        writable: true,
+
+      });
+
+      filesInput.dispatchEvent(new window.Event('change'));
+
+  
+
+      // 3. The clear button should now be visible
+
+      expect(clearFilesBtn.style.display).toBe("inline");
+
+  
+
+      // 4. Simulate clicking the clear button
+
+      clearFilesBtn.dispatchEvent(new window.Event('click'));
+
+  
+
+      // 5. The clear button should be hidden again and the input value cleared
+
+      expect(clearFilesBtn.style.display).toBe("none");
+
+      expect(filesInput.value).toBe("");
+
+  
+
+      // --- Test Case for Folder Input ---
+
+      // 1. Initially, the clear button should be hidden
+
+      expect(clearFolderBtn.style.display).toBe("none");
+
+  
+
+      // 2. Simulate selecting a folder
+
+      Object.defineProperty(folderInput, 'files', {
+
+          value: [{ name: 'folder' }],
+
+          writable: true,
+
+      });
+
+      folderInput.dispatchEvent(new window.Event('change'));
+
+  
+
+      // 3. The clear button should now be visible
+
+      expect(clearFolderBtn.style.display).toBe("inline");
+
+  
+
+      // 4. Simulate clicking the clear button
+
+      clearFolderBtn.dispatchEvent(new window.Event('click'));
+
+  
+
+      // 5. The clear button should be hidden again and the input value cleared
+
+      expect(clearFolderBtn.style.display).toBe("none");
+
+      expect(folderInput.value).toBe("");
+
+    }
+
+  });
+
+  

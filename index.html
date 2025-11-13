@@ -233,6 +233,8 @@ form.addEventListener('submit', async (e) => {
   status.textContent = `✅ Uploaded ${files.length} file(s)!`;
   filesInput.value = '';
   folderInput.value = '';
+  clearFilesBtn.style.display = 'none';
+  clearFolderBtn.style.display = 'none';
 });
 
 // Create starter page handler

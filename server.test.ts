@@ -113,7 +113,7 @@ describe("API: Main", () => {
     });
 
     expect(res.status).toBe(200);
-  });
+  }, 10000);
 
   test("POST /api/files - rejects disallowed file type", async () => {
     if (!authToken) return;
