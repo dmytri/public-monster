@@ -45,7 +45,7 @@ if (!token) {
 
 async function loadFiles(token) {
   const res = await fetch('/api/files', {
-    headers: { Authorization: `Bearer ${token}` }
+    credentials: 'include'
   });
   
   if (!res.ok) {
@@ -284,7 +284,7 @@ async function downloadAllAsZip(files, token) {
   
   // Add auth token as we can't set headers on <a> download
   const res = await fetch('/api/download-zip', {
-    headers: { 'Authorization': `Bearer ${token}` }
+    credentials: 'include'
   });
   
   if (res.ok) {
@@ -329,10 +329,10 @@ async function deleteEverything(files, token) {
     
     const res = await fetch('/api/files', {
       method: 'DELETE',
-      headers: { 
-        'Authorization': `Bearer ${token}`,
+      headers: {
         'Content-Type': 'application/json'
       },
+      credentials: 'include',
       body: JSON.stringify({ path })
     });
     
@@ -386,10 +386,10 @@ async function deleteDirectory(name, node, token) {
     
     const res = await fetch('/api/files', {
       method: 'DELETE',
-      headers: { 
-        'Authorization': `Bearer ${token}`,
+      headers: {
         'Content-Type': 'application/json'
       },
+      credentials: 'include',
       body: JSON.stringify({ path })
     });
     
@@ -409,10 +409,10 @@ async function deleteFile(path, token) {
   
   const res = await fetch('/api/files', {
     method: 'DELETE',
-    headers: { 
-      'Authorization': `Bearer ${token}`,
+    headers: {
       'Content-Type': 'application/json'
     },
+    credentials: 'include',
     body: JSON.stringify({ path })
   });
   

@@ -95,6 +95,73 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
     return userInfo.username;
   }
 
+  async function getAuthenticatedUser(req: Request) {
+    console.log('--- Authentication Debug ---');
+    console.log('URL:', req.url);
+    console.log('Method:', req.method);
+    
+    // For test environment, check test tokens first (from Authorization header)
+    if (env.TEST_AUTH_TOKEN) {
+      console.log('Test environment detected');
+      const authHeader = req.headers.get("Authorization");
+      console.log('Authorization header:', authHeader);
+      
+      if (authHeader?.startsWith("Bearer ")) {
+        const token = authHeader.substring(7);
+        console.log('Extracted token from header:', token);
+        if (token === env.TEST_AUTH_TOKEN) {
+          console.log('Test token matches TEST_AUTH_TOKEN, returning test user');
+          return { userid: "test-user-id", username: env.TEST_USERNAME || "testuser" };
+        }
+      }
+      
+      if (env.TEST_USER_DATA) {
+        const authHeader = req.headers.get("Authorization");
+        if (authHeader?.startsWith("Bearer ")) {
+          const token = authHeader.substring(7);
+          const testUsers = JSON.parse(env.TEST_USER_DATA);
+          if (testUsers[token]) {
+            console.log('Found user in TEST_USER_DATA');
+            return testUsers[token];
+          }
+        }
+      }
+    }
+    
+    // For non-test environments, try to get token from cookies
+    const cookieHeader = req.headers.get('cookie');
+    console.log('Cookie header:', cookieHeader);
+    
+    if (!cookieHeader) {
+      console.log('ERROR: No cookies found in request');
+      throw new Error("No authentication token found in cookies");
+    }
+    
+    // Parse the Cookie header
+    const cookies = cookieHeader
+      .split(';')
+      .map(cookie => cookie.trim().split('='))
+      .reduce((acc, [name, value]) => {
+        acc[name] = value;
+        return acc;
+      }, {});
+    
+    console.log('Parsed cookies:', cookies);
+    
+    const token = cookies['hanko'];
+    console.log('Hanko token from cookie:', token);
+    
+    if (!token) {
+      console.log('ERROR: No authentication token found in hanko cookie');
+      throw new Error("No authentication token found in cookies");
+    }
+    
+    console.log('Successfully found hanko token, proceeding with authentication');
+    const userInfo = await getUserInfo(token);
+    console.log('User info retrieved:', userInfo);
+    return userInfo;
+  }
+
   async function listFilesRecursive(path: string, user: string): Promise<any[]> {
     const url = `${BUNNY_STORAGE_URL}${path}`;
     const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
@@ -128,15 +195,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       // API: Upload, List, Delete files
       "/api/files": {
         POST: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
+          console.log('API /api/files POST called');
           let username: string;
           let userid: string;
           try {
-            const userInfo = await getUserInfo(token);
+            const userInfo = await getAuthenticatedUser(req);
             username = userInfo.username;
             userid = userInfo.userid;
+            console.log('User authenticated successfully:', { username, userid });
           } catch (err) {
+            console.log('Authentication failed for /api/files POST:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -170,15 +238,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           }
         },
         GET: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
+          console.log('API /api/files GET called');
           let username: string;
           let userid: string;
           try {
-            const userInfo = await getUserInfo(token);
+            const userInfo = await getAuthenticatedUser(req);
             username = userInfo.username;
             userid = userInfo.userid;
+            console.log('User authenticated successfully:', { username, userid });
           } catch (err) {
+            console.log('Authentication failed for /api/files GET:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -210,15 +279,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           }
         },
         DELETE: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
+          console.log('API /api/files DELETE called');
           let username: string;
           let userid: string;
           try {
-            const userInfo = await getUserInfo(token);
+            const userInfo = await getAuthenticatedUser(req);
             username = userInfo.username;
             userid = userInfo.userid;
+            console.log('User authenticated successfully:', { username, userid });
           } catch (err) {
+            console.log('Authentication failed for /api/files DELETE:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -245,15 +315,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       // API: Create starter page
       "/api/create-starter": {
         POST: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
+          console.log('API /api/create-starter POST called');
           let username: string;
           let userid: string;
           try {
-            const userInfo = await getUserInfo(token);
+            const userInfo = await getAuthenticatedUser(req);
             username = userInfo.username;
             userid = userInfo.userid;
+            console.log('User authenticated successfully:', { username, userid });
           } catch (err) {
+            console.log('Authentication failed for /api/create-starter POST:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -403,12 +474,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       // API: Download all files as zip
       "/api/files/zip": {
         GET: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
-          let username: string
+          console.log('API /api/files/zip GET called');
+          let username: string;
           try {
-            username = await getUsername(token);
+            const userInfo = await getAuthenticatedUser(req);
+            username = userInfo.username;
+            console.log('User authenticated successfully:', { username });
           } catch (err) {
+            console.log('Authentication failed for /api/files/zip GET:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -453,12 +526,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       // API: Prepare username migration
       "/api/prepare-migration": {
         POST: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
-          let username: string
+          console.log('API /api/prepare-migration POST called');
+          let username: string;
           try {
-            username = await getUsername(token);
+            const userInfo = await getAuthenticatedUser(req);
+            username = userInfo.username;
+            console.log('User authenticated successfully:', { username });
           } catch (err) {
+            console.log('Authentication failed for /api/prepare-migration POST:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -484,12 +559,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       // API: Execute username migration
       "/api/migrate-username": {
         POST: async (req) => {
-          const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-          if (!token) return new Response("Unauthorized", { status: 401 });
+          console.log('API /api/migrate-username POST called');
           let newUsername: string;
           try {
-            newUsername = await getUsername(token);
+            const userInfo = await getAuthenticatedUser(req);
+            newUsername = userInfo.username;
+            console.log('User authenticated successfully:', { newUsername });
           } catch (err) {
+            console.log('Authentication failed for /api/migrate-username POST:', err);
             return new Response("Unauthorized", { status: 401 });
           }
 
@@ -613,13 +690,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       },
       
       "/api/files/download/:path": async (req) => {
-        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (!token) return new Response("Unauthorized", { status: 401 });
-        
+        console.log('API /api/files/download/:path called with params:', req.params);
         let username: string;
         try {
-          username = await getUsername(token);
+          const userInfo = await getAuthenticatedUser(req);
+          username = userInfo.username;
+          console.log('User authenticated successfully:', { username });
         } catch (err) {
+          console.log('Authentication failed for /api/files/download/:path:', err);
           return new Response("Unauthorized", { status: 401 });
         }
 
@@ -661,14 +739,20 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       
       // Dynamic route for individual file downloads
       "/api/download/*": async (req) => {
+        console.log('API /api/download/* called');
         const url = new URL(req.url);
         const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (!token) return new Response("Unauthorized", { status: 401 });
+        if (!token) {
+          console.log('No token found in /api/download/* request');
+          return new Response("Unauthorized", { status: 401 });
+        }
         
         let username: string;
         try {
           username = await getUsername(token);
+          console.log('User authenticated successfully for download:', { username });
         } catch (err) {
+          console.log('Authentication failed for /api/download/*:', err);
           return new Response("Unauthorized", { status: 401 });
         }
 
@@ -711,18 +795,22 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
     },
     // Fallback for unmatched routes
     async fetch(req) {
+      console.log('Fetch handler called for URL:', req.url, 'Method:', req.method);
       const url = new URL(req.url);
 
       // User file serving (moved from named routes)
       if (url.pathname.startsWith('/~')) {
         const cdnUrl = `${BUNNY_PULL_ZONE}${url.pathname}`;
         if (BUNNY_PULL_ZONE && BUNNY_PULL_ZONE !== `${url.protocol}//${url.hostname}`) {
+          console.log('Redirecting to CDN for user file:', cdnUrl);
           return Response.redirect(cdnUrl, 303);
         }
         // If no pull zone, or it's the same, return 404 since these are CDN paths
+        console.log('No pull zone configured, returning 404 for user file path:', url.pathname);
         return new Response("Not found", { status: 404 });
       }
 
+      console.log('Serving 404 page for unmatched route:', url.pathname);
       const file = Bun.file("404.html");
       if (!await file.exists()) {
         return new Response("Page not found", { status: 404 });

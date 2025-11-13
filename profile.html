@@ -43,7 +43,7 @@ window.prepareMigration = async function() {
   const token = await hanko.getSessionToken();
   const res = await fetch('/api/prepare-migration', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` }
+    credentials: 'include'
   });
   
   if (res.ok) {
@@ -85,9 +85,9 @@ window.migrateUsername = async function() {
   const res = await fetch('/api/migrate-username', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
+    credentials: 'include',
     body: JSON.stringify({ 
       oldUsername,
       token: window.migrationToken 
