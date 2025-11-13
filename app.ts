@@ -331,109 +331,77 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           const starterHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Character encoding - always use UTF-8 -->
   <meta charset="UTF-8">
-
-  <!-- Makes your page look good on phones and tablets -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Load a fun font from Bunny Fonts (privacy-friendly!) -->
   <link rel="preconnect" href="https://fonts.bunny.net">
   <link href="https://fonts.bunny.net/css?family=comic-neue:400,700" rel="stylesheet">
-
-  <!-- This shows up in the browser tab -->
   <title>~${username} on public.monster</title>
-
-  <!-- CSS = Cascading Style Sheets - this is where you style your page! -->
   <style>
-    /* The body is everything you see on the page */
     body {
-      /* Diagonal striped background - teal and magenta */
-      background-image:
-        repeating-linear-gradient(
-          45deg,
-          #008080 0px,
-          #008080 20px,
-          #ff00ff 20px,
-          #ff00ff 40px
-        );
+      background-image: repeating-linear-gradient(45deg, #008080 0px, #008080 20px, #ff00ff 20px, #ff00ff 40px);
       font-family: "Comic Neue", "Comic Sans MS", cursive;
-      color: #ffff00;  /* Yellow text */
+      color: #ffff00;
       text-align: center;
       padding: 20px;
     }
-
-    /* The main content box in the center */
+    
     main {
-      background: #000;  /* Black background */
-      border: 5px ridge #ff00ff;  /* Magenta 3D border */
+      background: #000;
+      border: 5px ridge #ff00ff;
       padding: 40px;
       max-width: 600px;
-      margin: 40px auto;  /* Centers the box */
-      box-shadow: 10px 10px 0 rgba(255, 0, 255, 0.5);  /* Drop shadow */
+      margin: 40px auto;
+      box-shadow: 10px 10px 0 rgba(255, 0, 255, 0.5);
     }
-
-    /* Main heading */
+    
     h1 {
-      color: #ffff00;  /* Yellow */
-      font-size: 2.5em;  /* em = relative to parent font size */
-      text-shadow: 3px 3px 0 #ff00ff, 6px 6px 0 #00ffff;  /* Double shadow! */
+      color: #ffff00;
+      font-size: 2.5em;
+      text-shadow: 3px 3px 0 #ff00ff, 6px 6px 0 #00ffff;
       margin: 0 0 20px 0;
     }
-
-    /* Paragraphs */
+    
     p {
       font-size: 1.1em;
-      line-height: 1.6;  /* Space between lines */
+      line-height: 1.6;
       margin: 15px 0;
     }
-
-    /* Links */
+    
     a {
-      color: #00ff00;  /* Green */
-      text-decoration: none;  /* No underline by default */
+      color: #00ff00;
+      text-decoration: none;
       font-weight: bold;
     }
-
-    /* Links when you hover over them */
+    
     a:hover {
-      color: #ffff00;  /* Yellow */
+      color: #ffff00;
       text-decoration: underline;
     }
-
-    /* Info boxes */
+    
     .box {
-      background: #000;  /* Black */
-      border: 3px solid #00ffff;  /* Cyan border */
+      background: #000;
+      border: 3px solid #00ffff;
       padding: 20px;
       margin: 20px 0;
-      text-align: left;  /* Left-align text in boxes */
+      text-align: left;
     }
-
-    /* Code snippets */
+    
     code {
-      background: #ff00ff;  /* Magenta */
-      color: #fff;  /* White text */
+      background: #ff00ff;
+      color: #fff;
       padding: 2px 6px;
-      font-family: monospace;  /* Fixed-width font */
+      font-family: monospace;
     }
-
-    /* Bold text */
+    
     strong {
-      color: #00ffff;  /* Cyan */
+      color: #00ffff;
     }
   </style>
 </head>
-
-<!-- The body contains everything visible on your page -->
 <body>
-
-  <!-- Main content area -->
   <main>
     <h1>🌐 Welcome to ~${username}!</h1>
-
     <p><strong>You're live on the web!</strong> This is your starter page. Download it, edit it, make it yours.</p>
-
     <div class="box">
       <p><strong>✏️ How to edit:</strong></p>
       <p>1. Go to <a href="https://public.monster/public_html">public_html</a><br>
@@ -441,15 +409,12 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
       3. Edit it with any text editor<br>
       4. Upload it back</p>
     </div>
-
     <div class="box">
       <p><strong>💡 Tips:</strong></p>
       <p>• HTML is just text with tags like <code>&lt;p&gt;</code> and <code>&lt;a&gt;</code><br>
       • Check the <a href="https://public.monster/faq">FAQ</a> for help with links and images</p>
     </div>
-
     <p>🚧 <em>Under construction since ${new Date().getFullYear()}</em> 🚧</p>
-
     <p><a href="https://public.monster">← public.monster</a></p>
   </main>
 </body>
