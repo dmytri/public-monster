@@ -8,6 +8,7 @@
 - **Follow YAGNI (You Aren't Gonna Need It)** - Implement only what is currently needed, not what might be needed later
 - **Do the simplest thing that could possibly work** - Choose the most straightforward solution that satisfies the requirements
 - **Always add tests** - Include tests for all implemented functionality to ensure quality and prevent regressions
+- **Follow instructions precisely** - Only implement exactly what is requested, without adding additional functionality beyond the specific request
 
 ## Project-Specific Notes
 

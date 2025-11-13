@@ -174,25 +174,30 @@ clearFolderBtn.addEventListener('click', () => {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const files = [...(filesInput.files || []), ...(folderInput.files || [])];
-  
+
   if (files.length === 0) {
     status.textContent = '❌ No files selected';
     return;
   }
-  
+
+  // Disable the upload button during upload
+  const uploadButton = document.getElementById('btn');
+  uploadButton.disabled = true;
+  uploadButton.textContent = '⏳ Uploading...';
+
   status.textContent = `⏳ Uploading ${files.length} file(s)...`;
-  
+
   const flattenFolder = document.getElementById('flattenFolder').checked;
-  
+
   let count = 0;
   for (const file of files) {
     count++;
     status.textContent = `⏳ Uploading ${count}/${files.length}: ${file.name}...`;
     const formData = new FormData();
     formData.append('file', file);
-    
+
     let path = file.webkitRelativePath || file.name;
-    
+
     // If flatten is checked and this is a folder upload, strip the first folder name
     if (flattenFolder && file.webkitRelativePath) {
       const parts = file.webkitRelativePath.split('/');
@@ -200,41 +205,51 @@ form.addEventListener('submit', async (e) => {
         path = parts.slice(1).join('/');
       }
     }
-    
+
     formData.append('path', path);
-    
+
     try {
       const headers = {};
       if (window.hankoToken) {
         headers['Authorization'] = 'Bearer ' + window.hankoToken;
       }
-      
+
       const res = await fetch('/api/files', {
         method: 'POST',
         headers: headers,
         body: formData
       });
-      
+
       if (!res.ok) {
         status.textContent = `❌ Upload failed (${count}/${files.length}): ${file.name}`;
+        // Re-enable the upload button on failure
+        uploadButton.disabled = false;
+        uploadButton.textContent = '🚀 Upload';
         return;
       }
-      
+
       // Small delay between uploads to avoid rate limiting
       if (count < files.length) {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
     } catch (err) {
       status.textContent = `❌ Error: ${err.message}`;
+      // Re-enable the upload button on error
+      uploadButton.disabled = false;
+      uploadButton.textContent = '🚀 Upload';
       return;
     }
   }
-  
+
   status.textContent = `✅ Uploaded ${files.length} file(s)!`;
   filesInput.value = '';
   folderInput.value = '';
   clearFilesBtn.style.display = 'none';
   clearFolderBtn.style.display = 'none';
+
+  // Re-enable the upload button after completion
+  uploadButton.disabled = false;
+  uploadButton.textContent = '🚀 Upload';
 });
 
 // Create starter page handler
