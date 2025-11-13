@@ -229,9 +229,10 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           }
 
           try {
+            await uploadToBunny('/~' + username + '/' + path, file);
+            // Update etag after successful upload
             const etagValue = Bun.hash(userid + Date.now());
             await uploadToBunny('/!' + userid + '/etag', new Blob([etagValue.toString()]));
-            await uploadToBunny('/~' + username + '/' + path, file);
             return new Response("OK");
           } catch (err) {
             return new Response("Upload failed", { status: 500 });
@@ -297,13 +298,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           if (!path) return new Response("Bad request", { status: 400 });
 
           try {
-            const etagValue = Bun.hash(userid + Date.now());
-            const etagUrl = `${BUNNY_STORAGE_URL}/!${userid}/etag`;
-            await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
-
             const deleteUrl = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
             const res = await fetch(deleteUrl, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
             if (!res.ok) return new Response("Delete failed", { status: 500 });
+
+            // Update etag after successful deletion
+            const etagValue = Bun.hash(userid + Date.now());
+            const etagUrl = `${BUNNY_STORAGE_URL}/!${userid}/etag`;
+            await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
 
             return new Response("OK");
           } catch (err) {
@@ -421,13 +423,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 </html>`;
 
           try {
-            const etagValue = Bun.hash(userid + Date.now());
-            const etagUrl = `${BUNNY_STORAGE_URL}/!${userid}/etag`;
-            await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
-
             const uploadUrl = `${BUNNY_STORAGE_URL}/~${username}/index.html`;
             const res = await fetch(uploadUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: starterHTML });
             if (!res.ok) throw new Error("Upload failed");
+
+            // Update etag after successful upload
+            const etagValue = Bun.hash(userid + Date.now());
+            const etagUrl = `${BUNNY_STORAGE_URL}/!${userid}/etag`;
+            await fetch(etagUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: etagValue.toString() });
 
             return new Response("OK");
           } catch (err) {
