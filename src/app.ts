@@ -59,10 +59,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
     '.webmanifest', '.map'
   ];
 
-  async function storagePath(token: string, path: string): Promise<string> {
-    // Get the username using the existing getUsername function
-    const username = await getUsername(token);
-
+  async function storagePath(username: string, path: string): Promise<string> {
     // Simple check: reject any path containing '..' to prevent directory traversal
     if (path.includes('..')) {
       throw new Error('Invalid path: attempted directory traversal');
@@ -124,67 +121,114 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
     return userInfo.username;
   }
 
-  async function getAuthenticatedUser(req: Request) {
-    console.log('--- Authentication Debug ---');
-    console.log('URL:', req.url);
-    console.log('Method:', req.method);
-    
-    // For test environment, check test tokens first (from Authorization header)
-    if (env.TEST_AUTH_TOKEN) {
-      console.log('Test environment detected');
+  function getToken(req: Request, env: NodeJS.ProcessEnv): string | null {
+    // Test mode: check both cookie and Authorization header
+    if (env.TEST_AUTH_TOKEN || env.TEST_USER_DATA) {
+      // Check cookie first
+      const cookieToken = req.cookies?.hanko ?? null;
+      if (cookieToken) return cookieToken;
+
+      // Check Authorization header for Bearer token
       const authHeader = req.headers.get("Authorization");
-      console.log('Authorization header:', authHeader);
-      
       if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.substring(7);
-        console.log('Extracted token from header:', token);
-        if (token === env.TEST_AUTH_TOKEN) {
-          console.log('Test token matches TEST_AUTH_TOKEN, returning test user');
-          return { userid: "test-user-id", username: env.TEST_USERNAME || "testuser" };
+        const headerToken = authHeader.substring(7);
+
+        // Check if it matches the main TEST_AUTH_TOKEN
+        if (headerToken === env.TEST_AUTH_TOKEN) {
+          return headerToken;
         }
-      }
-      
-      if (env.TEST_USER_DATA) {
-        const authHeader = req.headers.get("Authorization");
-        if (authHeader?.startsWith("Bearer ")) {
-          const token = authHeader.substring(7);
-          const testUsers = JSON.parse(env.TEST_USER_DATA);
-          if (testUsers[token]) {
-            console.log('Found user in TEST_USER_DATA');
-            return testUsers[token];
+
+        // Check if it matches any token in TEST_USER_DATA
+        if (env.TEST_USER_DATA) {
+          try {
+            const testUsers = JSON.parse(env.TEST_USER_DATA);
+            if (testUsers[headerToken]) {
+              return headerToken;
+            }
+          } catch (e) {
+            // If JSON parsing fails, continue with normal flow
           }
         }
       }
+
+      // Don't fallback to TEST_AUTH_TOKEN unless explicitly provided
+      return null;
     }
-    
-    // For non-test environments, try to get token from cookies
-    const cookieHeader = req.headers.get('cookie');
-    console.log('Cookie header:', cookieHeader);
-    
-    if (!cookieHeader) {
-      console.log('ERROR: No cookies found in request');
-      throw new Error("No authentication token found in cookies");
+
+    // Normal mode: always use Bun's cookie parser
+    return req.cookies?.hanko ?? null;
+  }
+
+  type AuthenticatedUser = { userid: string; username: string };
+
+  type AuthedHandler = (
+    req: Request,
+    user: AuthenticatedUser,
+  ) => Promise<Response> | Response;
+
+  async function storagePathForUser(username: string, path: string): Promise<string> {
+    // Simple check: reject any path containing '..' to prevent directory traversal
+    if (path.includes('..')) {
+      throw new Error('Invalid path: attempted directory traversal');
     }
-    
-    // Parse the Cookie header
-    const cookies = cookieHeader
-      .split(';')
-      .map(cookie => cookie.trim().split('='))
-      .reduce((acc, [name, value]) => {
-        acc[name] = value;
-        return acc;
-      }, {});
-    
-    console.log('Parsed cookies:', cookies);
-    
-    const token = cookies['hanko'];
-    console.log('Hanko token from cookie:', token);
-    
-    if (!token) {
-      console.log('ERROR: No authentication token found in hanko cookie');
-      throw new Error("No authentication token found in cookies");
+
+    // Check for absolute path attempts (paths starting with / or \)
+    if (path.startsWith('/') || path.startsWith('\\')) {
+      throw new Error('Invalid path: attempted directory traversal');
     }
-    
+
+    // Prepend ~username to the path
+    const prefixedPath = `~${username}/${path}`;
+
+    // Normalize the path using Node.js path.normalize (available in Bun)
+    const normalizedPath = require('path').normalize(prefixedPath);
+
+    // Verify that the result starts with ~username
+    if (!normalizedPath.startsWith(`~${username}/`) && normalizedPath !== `~${username}`) {
+      throw new Error('Invalid path: attempted directory traversal');
+    }
+
+    // Return the normalized path with leading slash for storage URL
+    return '/' + normalizedPath;
+  }
+
+  function requireAuth(env: NodeJS.ProcessEnv, handler: AuthedHandler) {
+    return async (req: Request): Promise<Response> => {
+      const token = getToken(req, env);
+      if (!token) return new Response("Unauthorized", { status: 401 });
+
+      let user: AuthenticatedUser;
+      try {
+        user = await getAuthenticatedUser(token);
+      } catch (err) {
+        console.log("Authentication failed:", err);
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      return handler(req, user);
+    };
+  }
+
+  async function getAuthenticatedUser(token: string) {
+    console.log('--- Authentication Debug ---');
+
+    // For test environment, check test tokens first (from Authorization header or passed token)
+    if (env.TEST_AUTH_TOKEN) {
+      console.log('Test environment detected');
+      if (token === env.TEST_AUTH_TOKEN) {
+        console.log('Test token matches TEST_AUTH_TOKEN, returning test user');
+        return { userid: "test-user-id", username: env.TEST_USERNAME || "testuser" };
+      }
+
+      if (env.TEST_USER_DATA) {
+        const testUsers = JSON.parse(env.TEST_USER_DATA);
+        if (testUsers[token]) {
+          console.log('Found user in TEST_USER_DATA');
+          return testUsers[token];
+        }
+      }
+    }
+
     console.log('Successfully found hanko token, proceeding with authentication');
     const userInfo = await getUserInfo(token);
     console.log('User info retrieved:', userInfo);
@@ -223,56 +267,22 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
     routes: {
       // API: Upload, List, Delete files
       "/api/files": {
-        POST: async (req) => {
+        POST: requireAuth(env, async (req, user) => {
           console.log('API /api/files POST called');
-          let username: string;
-          let userid: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            username = userInfo.username;
-            userid = userInfo.userid;
-            console.log('User authenticated successfully:', { username, userid });
-          } catch (err) {
-            console.log('Authentication failed for /api/files POST:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username, userid } = user;
+          console.log('User authenticated successfully:', { username, userid });
 
           const form = await req.formData();
           const file = form.get("file") as File;
           const path = form.get("path") as string;
           if (!file || !path) return new Response("Bad request", { status: 400 });
 
-          // Extract token from request to use with storagePath function
-          let token: string | null = null;
-          if (env.TEST_AUTH_TOKEN) {
-            const authHeader = req.headers.get("Authorization");
-            if (authHeader?.startsWith("Bearer ")) {
-              token = authHeader.substring(7);
-            }
-          } else {
-            // For non-test environments, get token from cookies
-            const cookieHeader = req.headers.get('cookie');
-            if (cookieHeader) {
-              const cookies = cookieHeader
-                .split(';')
-                .map(cookie => cookie.trim().split('='))
-                .reduce((acc, [name, value]) => {
-                  acc[name] = value;
-                  return acc;
-                }, {});
-              token = cookies['hanko'];
-            }
-          }
-
-          if (!token) {
-            return new Response("Unauthorized", { status: 401 });
-          }
-
           // Use storagePath to validate and create the safe storage path first
           // This will catch any path traversal attempts before other checks
           let targetPath: string;
           try {
-            targetPath = await storagePath(token, path);
+            targetPath = await storagePath(user.userid, path);
           } catch (err) {
             if (err instanceof Error && err.message.includes('directory traversal')) {
               return new Response("Invalid file path", { status: 400 });
@@ -306,20 +316,12 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           } catch (err) {
             return new Response("Upload failed", { status: 500 });
           }
-        },
-        GET: async (req) => {
+        }),
+        GET: requireAuth(env, async (req, user) => {
           console.log('API /api/files GET called');
-          let username: string;
-          let userid: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            username = userInfo.username;
-            userid = userInfo.userid;
-            console.log('User authenticated successfully:', { username, userid });
-          } catch (err) {
-            console.log('Authentication failed for /api/files GET:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username, userid } = user;
+          console.log('User authenticated successfully:', { username, userid });
 
           try {
             const files = await listFilesRecursive(`/~${username}/`, username);
@@ -347,54 +349,20 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           } catch {
             return new Response(JSON.stringify([]), { headers: { "Content-Type": "application/json" } });
           }
-        },
-        DELETE: async (req) => {
+        }),
+        DELETE: requireAuth(env, async (req, user) => {
           console.log('API /api/files DELETE called');
-          let username: string;
-          let userid: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            username = userInfo.username;
-            userid = userInfo.userid;
-            console.log('User authenticated successfully:', { username, userid });
-          } catch (err) {
-            console.log('Authentication failed for /api/files DELETE:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username, userid } = user;
+          console.log('User authenticated successfully:', { username, userid });
 
           const body = await req.json();
           const path = body.path;
           if (!path) return new Response("Bad request", { status: 400 });
 
           try {
-            // Extract token from request to use with storagePath function
-            let token: string | null = null;
-            if (env.TEST_AUTH_TOKEN) {
-              const authHeader = req.headers.get("Authorization");
-              if (authHeader?.startsWith("Bearer ")) {
-                token = authHeader.substring(7);
-              }
-            } else {
-              // For non-test environments, get token from cookies
-              const cookieHeader = req.headers.get('cookie');
-              if (cookieHeader) {
-                const cookies = cookieHeader
-                  .split(';')
-                  .map(cookie => cookie.trim().split('='))
-                  .reduce((acc, [name, value]) => {
-                    acc[name] = value;
-                    return acc;
-                  }, {});
-                token = cookies['hanko'];
-              }
-            }
-
-            if (!token) {
-              return new Response("Unauthorized", { status: 401 });
-            }
-
             // Use storagePath to create the safe storage path
-            const deletePath = await storagePath(token, path);
+            const deletePath = await storagePath(user.userid, path);
             const deleteUrl = `${BUNNY_STORAGE_URL}${deletePath}`;
             const res = await fetch(deleteUrl, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
             if (!res.ok) return new Response("Delete failed", { status: 500 });
@@ -411,24 +379,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
             }
             return new Response("Delete failed", { status: 500 });
           }
-        }
+        })
       },
 
       // API: Create starter page
       "/api/create-starter": {
-        POST: async (req) => {
+        POST: requireAuth(env, async (req, user) => {
           console.log('API /api/create-starter POST called');
-          let username: string;
-          let userid: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            username = userInfo.username;
-            userid = userInfo.userid;
-            console.log('User authenticated successfully:', { username, userid });
-          } catch (err) {
-            console.log('Authentication failed for /api/create-starter POST:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username, userid } = user;
+          console.log('User authenticated successfully:', { username, userid });
 
           // Read the starter HTML template from public/starter.html
           const file = Bun.file("./public/starter.html");
@@ -455,22 +415,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           } catch (err) {
             return new Response("Failed to create starter page", { status: 500 });
           }
-        }
+        })
       },
 
       // API: Download all files as zip
       "/api/files/zip": {
-        GET: async (req) => {
+        GET: requireAuth(env, async (req, user) => {
           console.log('API /api/files/zip GET called');
-          let username: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            username = userInfo.username;
-            console.log('User authenticated successfully:', { username });
-          } catch (err) {
-            console.log('Authentication failed for /api/files/zip GET:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username } = user;
+          console.log('User authenticated successfully:', { username });
 
           try {
             const files = await listFilesRecursive(`/~${username}/`, username);
@@ -516,22 +470,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
             console.error(err);
             return new Response("Failed to create zip", { status: 500 });
           }
-        }
+        })
       },
 
       // API: Prepare username migration
       "/api/prepare-migration": {
-        POST: async (req) => {
+        POST: requireAuth(env, async (req, user) => {
           console.log('API /api/prepare-migration POST called');
-          let username: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            username = userInfo.username;
-            console.log('User authenticated successfully:', { username });
-          } catch (err) {
-            console.log('Authentication failed for /api/prepare-migration POST:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username } = user;
+          console.log('User authenticated successfully:', { username });
 
           try {
             const migrationToken = crypto.randomUUID();
@@ -549,22 +497,16 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
             console.error(err);
             return new Response("Failed to prepare migration", { status: 500 });
           }
-        }
+        })
       },
 
       // API: Execute username migration
       "/api/migrate-username": {
-        POST: async (req) => {
+        POST: requireAuth(env, async (req, user) => {
           console.log('API /api/migrate-username POST called');
-          let newUsername: string;
-          try {
-            const userInfo = await getAuthenticatedUser(req);
-            newUsername = userInfo.username;
-            console.log('User authenticated successfully:', { newUsername });
-          } catch (err) {
-            console.log('Authentication failed for /api/migrate-username POST:', err);
-            return new Response("Unauthorized", { status: 401 });
-          }
+
+          const { username: newUsername } = user;
+          console.log('User authenticated successfully:', { newUsername });
 
           const body = await req.json();
           const oldUsername = body.oldUsername;
@@ -613,7 +555,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
             console.error(err);
             return new Response("Migration failed", { status: 500 });
           }
-        }
+        })
       },
 
       // Static routes
@@ -685,17 +627,11 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
         return new Response(file, { headers: { "Content-Type": "image/png" } });
       },
       
-      "/api/files/download/:path": async (req) => {
+      "/api/files/download/:path": requireAuth(env, async (req, user) => {
         console.log('API /api/files/download/:path called with params:', req.params);
-        let username: string;
-        try {
-          const userInfo = await getAuthenticatedUser(req);
-          username = userInfo.username;
-          console.log('User authenticated successfully:', { username });
-        } catch (err) {
-          console.log('Authentication failed for /api/files/download/:path:', err);
-          return new Response("Unauthorized", { status: 401 });
-        }
+
+        const { username } = user;
+        console.log('User authenticated successfully:', { username });
 
         const filePath = req.params.path;
 
@@ -704,40 +640,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
         }
 
         try {
-          // Extract token from request to use with storagePath function
-          let token: string | null = null;
-          if (env.TEST_AUTH_TOKEN) {
-            const authHeader = req.headers.get("Authorization");
-            if (authHeader?.startsWith("Bearer ")) {
-              token = authHeader.substring(7);
-            }
-          } else {
-            // For non-test environments, get token from cookies
-            const cookieHeader = req.headers.get('cookie');
-            if (cookieHeader) {
-              const cookies = cookieHeader
-                .split(';')
-                .map(cookie => cookie.trim().split('='))
-                .reduce((acc, [name, value]) => {
-                  acc[name] = value;
-                  return acc;
-                }, {});
-              token = cookies['hanko'];
-            }
-          }
-
-          if (!token) {
-            return new Response("Unauthorized", { status: 401 });
-          }
-
           // Use storagePath to create the safe storage path
-          const storagePathResult = await storagePath(token, filePath);
+          const storagePathResult = await storagePath(user.userid, filePath);
 
           // Fetch the file from Bunny Storage
           const res = await fetch(`${BUNNY_STORAGE_URL}${storagePathResult}`, {
             headers: { AccessKey: BUNNY_API_KEY }
           });
-          
+
           if (!res.ok) {
             return new Response("File not found", { status: 404 });
           }
@@ -745,10 +655,10 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           // Get the file content
           const fileContent = await res.arrayBuffer();
           const fileBlob = new Blob([fileContent]);
-          
+
           // Get the filename for the Content-Disposition header
           const fileName = filePath.split('/').pop() || 'download';
-          
+
           return new Response(fileBlob, {
             status: 200,
             headers: {
@@ -760,37 +670,26 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
         } catch (err) {
           return new Response("Download failed", { status: 500 });
         }
-      },
+      }),
       
       // Dynamic route for individual file downloads
-      "/api/download/*": async (req) => {
+      "/api/download/*": requireAuth(env, async (req, user) => {
         console.log('API /api/download/* called');
         const url = new URL(req.url);
-        const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-        if (!token) {
-          console.log('No token found in /api/download/* request');
-          return new Response("Unauthorized", { status: 401 });
-        }
-        
-        let username: string;
-        try {
-          username = await getUsername(token);
-          console.log('User authenticated successfully for download:', { username });
-        } catch (err) {
-          console.log('Authentication failed for /api/download/*:', err);
-          return new Response("Unauthorized", { status: 401 });
-        }
+
+        const { username } = user;
+        console.log('User authenticated successfully for download:', { username });
 
         // Extract file path from URL: /api/download/filename or /api/download/dir/filename
         const filePath = url.pathname.substring('/api/download/'.length);
-        
+
         if (!filePath) {
           return new Response("Bad request", { status: 400 });
         }
 
         try {
           // Use storagePath to create the safe storage path
-          const storagePathResult = await storagePath(token, filePath);
+          const storagePathResult = await storagePath(user.userid, filePath);
 
           // Fetch the file from Bunny Storage
           const res = await fetch(`${BUNNY_STORAGE_URL}${storagePathResult}`, {
@@ -822,7 +721,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           }
           return new Response("Download failed", { status: 500 });
         }
-      }
+      })
     },
     // Fallback for unmatched routes
     async fetch(req) {
