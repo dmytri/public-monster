@@ -282,7 +282,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           // This will catch any path traversal attempts before other checks
           let targetPath: string;
           try {
-            targetPath = await storagePath(user.userid, path);
+            targetPath = await storagePath(username, path);
           } catch (err) {
             if (err instanceof Error && err.message.includes('directory traversal')) {
               return new Response("Invalid file path", { status: 400 });
@@ -362,7 +362,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 
           try {
             // Use storagePath to create the safe storage path
-            const deletePath = await storagePath(user.userid, path);
+            const deletePath = await storagePath(username, path);
             const deleteUrl = `${BUNNY_STORAGE_URL}${deletePath}`;
             const res = await fetch(deleteUrl, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
             if (!res.ok) return new Response("Delete failed", { status: 500 });
@@ -641,7 +641,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 
         try {
           // Use storagePath to create the safe storage path
-          const storagePathResult = await storagePath(user.userid, filePath);
+          const storagePathResult = await storagePath(username, filePath);
 
           // Fetch the file from Bunny Storage
           const res = await fetch(`${BUNNY_STORAGE_URL}${storagePathResult}`, {
@@ -689,7 +689,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 
         try {
           // Use storagePath to create the safe storage path
-          const storagePathResult = await storagePath(user.userid, filePath);
+          const storagePathResult = await storagePath(username, filePath);
 
           // Fetch the file from Bunny Storage
           const res = await fetch(`${BUNNY_STORAGE_URL}${storagePathResult}`, {
