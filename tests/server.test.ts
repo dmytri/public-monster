@@ -210,6 +210,65 @@ describe("API: Main", () => {
     const blob = await res.blob();
     expect(blob.size).toBeGreaterThan(100);
   });
+
+  test("POST /api/files - rejects path traversal attempts", async () => {
+    if (!authToken) return;
+
+    // Test various path traversal attempts
+    const traversalAttempts = [
+      "../../../etc/passwd",
+      "..\\..\\windows\\system32",
+      "folder/../../etc/hosts",
+      "folder\\..\\..\\windows\\system32",
+      "/etc/passwd",
+      "\\windows\\system32",
+    ];
+
+    for (const traversalPath of traversalAttempts) {
+      const form = new FormData();
+      form.append("file", new Blob(["test content"]), "valid.txt"); // Use a valid file name
+      form.append("path", traversalPath); // But test the traversal path
+
+      const res = await fetch(`${BASE_URL}/api/files`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` },
+        body: form,
+      });
+
+      // Should reject path traversal attempts
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe("Invalid file path");
+    }
+  });
+
+  test("DELETE /api/files - rejects path traversal attempts", async () => {
+    if (!authToken) return;
+
+    // Test various path traversal attempts in DELETE requests
+    const traversalAttempts = [
+      "../../../etc/passwd",
+      "..\\..\\windows\\system32",
+      "folder/../../etc/hosts",
+      "folder\\..\\..\\windows\\system32",
+      "/etc/passwd",
+      "\\windows\\system32",
+    ];
+
+    for (const traversalPath of traversalAttempts) {
+      const res = await fetch(`${BASE_URL}/api/files`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path: traversalPath }),
+      });
+
+      // Should reject path traversal attempts
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe("Invalid file path");
+    }
+  });
 });
 
 describe("API: Migration", () => {

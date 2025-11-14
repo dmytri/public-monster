@@ -59,6 +59,35 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
     '.webmanifest', '.map'
   ];
 
+  async function storagePath(token: string, path: string): Promise<string> {
+    // Get the username using the existing getUsername function
+    const username = await getUsername(token);
+
+    // Simple check: reject any path containing '..' to prevent directory traversal
+    if (path.includes('..')) {
+      throw new Error('Invalid path: attempted directory traversal');
+    }
+
+    // Check for absolute path attempts (paths starting with / or \)
+    if (path.startsWith('/') || path.startsWith('\\')) {
+      throw new Error('Invalid path: attempted directory traversal');
+    }
+
+    // Prepend ~username to the path
+    const prefixedPath = `~${username}/${path}`;
+
+    // Normalize the path using Node.js path.normalize (available in Bun)
+    const normalizedPath = require('path').normalize(prefixedPath);
+
+    // Verify that the result starts with ~username
+    if (!normalizedPath.startsWith(`~${username}/`) && normalizedPath !== `~${username}`) {
+      throw new Error('Invalid path: attempted directory traversal');
+    }
+
+    // Return the normalized path with leading slash for storage URL
+    return '/' + normalizedPath;
+  }
+
   async function getUserInfo(token: string) {
     if (env.TEST_USER_DATA) {
       const testUsers = JSON.parse(env.TEST_USER_DATA);
@@ -213,11 +242,51 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           const path = form.get("path") as string;
           if (!file || !path) return new Response("Bad request", { status: 400 });
 
+          // Extract token from request to use with storagePath function
+          let token: string | null = null;
+          if (env.TEST_AUTH_TOKEN) {
+            const authHeader = req.headers.get("Authorization");
+            if (authHeader?.startsWith("Bearer ")) {
+              token = authHeader.substring(7);
+            }
+          } else {
+            // For non-test environments, get token from cookies
+            const cookieHeader = req.headers.get('cookie');
+            if (cookieHeader) {
+              const cookies = cookieHeader
+                .split(';')
+                .map(cookie => cookie.trim().split('='))
+                .reduce((acc, [name, value]) => {
+                  acc[name] = value;
+                  return acc;
+                }, {});
+              token = cookies['hanko'];
+            }
+          }
+
+          if (!token) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+
+          // Use storagePath to validate and create the safe storage path first
+          // This will catch any path traversal attempts before other checks
+          let targetPath: string;
+          try {
+            targetPath = await storagePath(token, path);
+          } catch (err) {
+            if (err instanceof Error && err.message.includes('directory traversal')) {
+              return new Response("Invalid file path", { status: 400 });
+            }
+            throw err; // Re-throw if it's a different error
+          }
+
           if (file.size > MAX_FILE_SIZE) {
             return new Response(`File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`, { status: 413 });
           }
 
-          const ext = path.toLowerCase().substring(path.lastIndexOf('.'));
+          // Extract the actual filename after normalization to check its extension
+          const actualFilename = targetPath.split('/').pop() || '';
+          const ext = actualFilename.toLowerCase().substring(actualFilename.lastIndexOf('.'));
           if (ext === '' || !ALLOWED_EXTENSIONS.includes(ext)) {
             return new Response("File type not allowed", { status: 403 });
           }
@@ -229,7 +298,7 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           }
 
           try {
-            await uploadToBunny('/~' + username + '/' + path, file);
+            await uploadToBunny(targetPath, file);
             // Update etag after successful upload
             const etagValue = Bun.hash(userid + Date.now());
             await uploadToBunny('/!' + userid + '/etag', new Blob([etagValue.toString()]));
@@ -298,7 +367,35 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           if (!path) return new Response("Bad request", { status: 400 });
 
           try {
-            const deleteUrl = `${BUNNY_STORAGE_URL}/~${username}/${path}`;
+            // Extract token from request to use with storagePath function
+            let token: string | null = null;
+            if (env.TEST_AUTH_TOKEN) {
+              const authHeader = req.headers.get("Authorization");
+              if (authHeader?.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+              }
+            } else {
+              // For non-test environments, get token from cookies
+              const cookieHeader = req.headers.get('cookie');
+              if (cookieHeader) {
+                const cookies = cookieHeader
+                  .split(';')
+                  .map(cookie => cookie.trim().split('='))
+                  .reduce((acc, [name, value]) => {
+                    acc[name] = value;
+                    return acc;
+                  }, {});
+                token = cookies['hanko'];
+              }
+            }
+
+            if (!token) {
+              return new Response("Unauthorized", { status: 401 });
+            }
+
+            // Use storagePath to create the safe storage path
+            const deletePath = await storagePath(token, path);
+            const deleteUrl = `${BUNNY_STORAGE_URL}${deletePath}`;
             const res = await fetch(deleteUrl, { method: "DELETE", headers: { AccessKey: BUNNY_API_KEY } });
             if (!res.ok) return new Response("Delete failed", { status: 500 });
 
@@ -309,6 +406,9 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
 
             return new Response("OK");
           } catch (err) {
+            if (err instanceof Error && err.message.includes('directory traversal')) {
+              return new Response("Invalid file path", { status: 400 });
+            }
             return new Response("Delete failed", { status: 500 });
           }
         }
@@ -598,14 +698,43 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
         }
 
         const filePath = req.params.path;
-        
+
         if (!filePath) {
           return new Response("Bad request", { status: 400 });
         }
 
         try {
+          // Extract token from request to use with storagePath function
+          let token: string | null = null;
+          if (env.TEST_AUTH_TOKEN) {
+            const authHeader = req.headers.get("Authorization");
+            if (authHeader?.startsWith("Bearer ")) {
+              token = authHeader.substring(7);
+            }
+          } else {
+            // For non-test environments, get token from cookies
+            const cookieHeader = req.headers.get('cookie');
+            if (cookieHeader) {
+              const cookies = cookieHeader
+                .split(';')
+                .map(cookie => cookie.trim().split('='))
+                .reduce((acc, [name, value]) => {
+                  acc[name] = value;
+                  return acc;
+                }, {});
+              token = cookies['hanko'];
+            }
+          }
+
+          if (!token) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+
+          // Use storagePath to create the safe storage path
+          const storagePathResult = await storagePath(token, filePath);
+
           // Fetch the file from Bunny Storage
-          const res = await fetch(`${BUNNY_STORAGE_URL}/~${username}/${filePath}`, {
+          const res = await fetch(`${BUNNY_STORAGE_URL}${storagePathResult}`, {
             headers: { AccessKey: BUNNY_API_KEY }
           });
           
@@ -660,11 +789,14 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
         }
 
         try {
+          // Use storagePath to create the safe storage path
+          const storagePathResult = await storagePath(token, filePath);
+
           // Fetch the file from Bunny Storage
-          const res = await fetch(`${BUNNY_STORAGE_URL}/~${username}/${filePath}`, {
+          const res = await fetch(`${BUNNY_STORAGE_URL}${storagePathResult}`, {
             headers: { AccessKey: BUNNY_API_KEY }
           });
-          
+
           if (!res.ok) {
             return new Response("File not found", { status: 404 });
           }
@@ -672,10 +804,10 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
           // Get the file content
           const fileContent = await res.arrayBuffer();
           const fileBlob = new Blob([fileContent]);
-          
+
           // Get the filename for the Content-Disposition header
           const fileName = filePath.split('/').pop() || 'download';
-          
+
           return new Response(fileBlob, {
             status: 200,
             headers: {
@@ -685,6 +817,9 @@ export function startServer(env: NodeJS.ProcessEnv, port: number = 3000) {
             }
           });
         } catch (err) {
+          if (err instanceof Error && err.message.includes('directory traversal')) {
+            return new Response("Invalid file path", { status: 400 });
+          }
           return new Response("Download failed", { status: 500 });
         }
       }
