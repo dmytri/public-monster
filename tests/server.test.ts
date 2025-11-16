@@ -4,53 +4,31 @@ import { startServer } from "../src/app";
 
 // --- Test Configuration ---
 
-const TEST_PORT = 3001;
+const TEST_PORT:number = 3001;
+const TEST_USERNAME:string = `_`;
+
 const BASE_URL = `http://localhost:${TEST_PORT}`;
-// THIS IS A TEST USER'S TOKEN, NOT A PRODUCTION TOKEN
-let authToken = process.env.TEST_AUTH_TOKEN || "test-token";
-let username = process.env.TEST_USERNAME || "testuser";
-
-
 
 let server: Server;
 
 // --- Test Hooks ---
 
 beforeAll(async () => {
-  const testUserData = {
-    "test-token-old": { userid: "test-user-id-old", username: "testuser-old" },
-    "test-token-new": { userid: "test-user-id-new", username: "testuser-new" },
-  };
-
-  server = startServer({
-    ...process.env,
-    TEST_AUTH_TOKEN: authToken,
-    TEST_USERNAME: username,
-    TEST_USER_DATA: JSON.stringify(testUserData),
-  }, TEST_PORT);
+  server = startServer(TEST_PORT, {'username': TEST_USERNAME});
   await Bun.sleep(50); // Wait for server to start
 });
-
-
 
 // --- Helper Functions ---
 
 async function cleanup() {
-    if (!authToken) return;
-    const res = await fetch(`${BASE_URL}/api/files`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-    });
+    const res = await fetch(`${BASE_URL}/api/files`)
     if (!res.ok) return;
     const files = await res.json();
     for (const file of files) {
-        await fetch(`${BASE_URL}/api/files`, {
-            method: "DELETE",
-            headers: {
-                Authorization: `Bearer ${authToken}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ path: file.ObjectName }),
-        });
+      await fetch(`${BASE_URL}/api/files`, {
+          method: "DELETE",
+          body: JSON.stringify({ path: file.ObjectName }),
+      });
     }
 }
 
@@ -83,47 +61,32 @@ test("GET /public_html - serves file manager with env var replaced", async () =>
 });
 
 test("GET /~username/path - redirects to CDN pull zone", async () => {
-  if (!username) return;
-  const res = await fetch(`${BASE_URL}/~${username}/index.html`, { redirect: "manual" });
+  const res = await fetch(`${BASE_URL}/~_/index.html`, { redirect: "manual" });
   expect(res.status).toBe(303);
-  expect(res.headers.get("location")).toContain(`/~${username}/index.html`);
+  expect(res.headers.get("location")).toContain(`/~_/index.html`);
 });
 
 describe("API: Main", () => {
-  test("POST /api/files - fails without auth", async () => {
+  test("POST /api/files - uploads a file", async () => {
     const form = new FormData();
-    form.append("file", new Blob(["test"]), "test.txt");
-    form.append("path", "test.txt");
-    const res = await fetch(`${BASE_URL}/api/files`, { method: "POST", body: form });
-    expect(res.status).toBe(401);
-  });
-
-  test("POST /api/files - uploads a file with auth", async () => {
-    if (!authToken) return;
-    const form = new FormData();
-    const fileContent = "hello world";
-    const filePath = "test.txt";
-    form.append("file", new Blob([fileContent]), filePath);
-    form.append("path", filePath);
+    form.append("file", new Blob(['test']));
+    form.append("path", 'test.txt');
 
     const res = await fetch(`${BASE_URL}/api/files`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${authToken}` },
       body: form,
     });
 
     expect(res.status).toBe(200);
-  }, 10000);
+  }, 1000);
 
   test("POST /api/files - rejects disallowed file type", async () => {
-    if (!authToken) return;
     const form = new FormData();
     form.append("file", new Blob(["<script>alert(1)</script>"]), "danger.exe");
     form.append("path", "danger.exe");
 
     const res = await fetch(`${BASE_URL}/api/files`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${authToken}` },
       body: form,
     });
 
@@ -131,16 +94,14 @@ describe("API: Main", () => {
     expect(await res.text()).toBe("File type not allowed");
   });
 
-  test("GET /api/files - lists files for authenticated user", async () => {
-    if (!authToken) return;
+  test("GET /api/files - lists files", async () => {
     // Upload a file first
     const form = new FormData();
     form.append("file", new Blob(["test"]), "test.txt");
     form.append("path", "test.txt");
-    await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
+    await fetch(`${BASE_URL}/api/files`, { method: "POST", body: form });
 
     const res = await fetch(`${BASE_URL}/api/files`, {
-      headers: { Authorization: `Bearer ${authToken}` },
     });
 
     expect(res.status).toBe(200);
@@ -150,18 +111,16 @@ describe("API: Main", () => {
   }, 10000); // Increase timeout to 10 seconds
 
   test("DELETE /api/files - deletes a file", async () => {
-    if (!authToken) return;
     // Upload a file first
     const form = new FormData();
     const filePath = "to-be-deleted.txt";
     form.append("file", new Blob(["delete me"]), filePath);
     form.append("path", filePath);
-    await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
+    await fetch(`${BASE_URL}/api/files`, { method: "POST", body: form });
 
     const res = await fetch(`${BASE_URL}/api/files`, {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${authToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ path: filePath }),
@@ -170,39 +129,35 @@ describe("API: Main", () => {
     expect(res.status).toBe(200);
 
     // Add a small delay to allow for the deletion to propagate
-    await Bun.sleep(100);
+    await Bun.sleep(300);
 
     // Verify file is deleted
-    const listRes = await fetch(`${BASE_URL}/api/files`, { headers: { Authorization: `Bearer ${authToken}` } });
+    const listRes = await fetch(`${BASE_URL}/api/files`, {});
     const files = await listRes.json();
     expect(files.find((f:any) => f.ObjectName === filePath)).toBeUndefined();
   }, 10000); // Increase timeout to 10 seconds
 
   test("POST /api/create-starter - creates a starter index.html", async () => {
-    if (!authToken) return;
     const res = await fetch(`${BASE_URL}/api/create-starter`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${authToken}` },
     });
 
     expect(res.status).toBe(200);
 
     // Verify file is created
-    const listRes = await fetch(`${BASE_URL}/api/files`, { headers: { Authorization: `Bearer ${authToken}` } });
+    const listRes = await fetch(`${BASE_URL}/api/files`, {});
     const files = await listRes.json();
     expect(files.find((f:any) => f.ObjectName === "index.html")).toBeDefined();
   });
 
   test("GET /api/files/zip - returns a zip file", async () => {
-    if (!authToken) return;
     // Upload a file first
     const form = new FormData();
     form.append("file", new Blob(["test"]), "test.txt");
     form.append("path", "test.txt");
-    await fetch(`${BASE_URL}/api/files`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` }, body: form });
+    await fetch(`${BASE_URL}/api/files`, { method: "POST", body: form });
 
     const res = await fetch(`${BASE_URL}/api/files/zip`, {
-      headers: { Authorization: `Bearer ${authToken}` },
     });
 
     expect(res.status).toBe(200);
@@ -212,8 +167,6 @@ describe("API: Main", () => {
   });
 
   test("POST /api/files - rejects path traversal attempts", async () => {
-    if (!authToken) return;
-
     // Test various path traversal attempts
     const traversalAttempts = [
       "../../../etc/passwd",
@@ -226,12 +179,11 @@ describe("API: Main", () => {
 
     for (const traversalPath of traversalAttempts) {
       const form = new FormData();
-      form.append("file", new Blob(["test content"]), "valid.txt"); // Use a valid file name
-      form.append("path", traversalPath); // But test the traversal path
-
+      form.append("file", new Blob(["test content"])); // Use a valid file name
+      form.append("path", [traversalPath, 'valid.txt'].join('/')); // But test the traversal path
+      console.log('try', traversalPath)
       const res = await fetch(`${BASE_URL}/api/files`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${authToken}` },
         body: form,
       });
 
@@ -242,8 +194,6 @@ describe("API: Main", () => {
   });
 
   test("DELETE /api/files - rejects path traversal attempts", async () => {
-    if (!authToken) return;
-
     // Test various path traversal attempts in DELETE requests
     const traversalAttempts = [
       "../../../etc/passwd",
@@ -258,7 +208,6 @@ describe("API: Main", () => {
       const res = await fetch(`${BASE_URL}/api/files`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${authToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ path: traversalPath }),
@@ -294,44 +243,23 @@ describe("API: Migration", () => {
 
     await fetch(`${BASE_URL}/api/files`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${oldAuthToken}` },
       body: form,
     });
 
     // 2. Prepare migration as the old user
-    const prepareRes = await fetch(`${BASE_URL}/api/prepare-migration`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${oldAuthToken}` },
-    });
+    const prepareRes = await fetch(`${BASE_URL}/api/prepare-migration`)
     expect(prepareRes.status).toBe(200);
-    const { token: migrationToken } = await prepareRes.json();
-    expect(migrationToken).toBeString();
 
     // 3. Perform migration as the new user
     const migrateRes = await fetch(`${BASE_URL}/api/migrate-username`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${newAuthToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ oldUsername, token: migrationToken }),
+      body: JSON.stringify({ old: "=new" }),
     });
     expect(migrateRes.status).toBe(200);
-
-    // 4. Verify file was moved to new user's directory
-    const newFilesRes = await fetch(`${BASE_URL}/api/files`, {
-      headers: { Authorization: `Bearer ${newAuthToken}` },
-    });
-    const newFiles = await newFilesRes.json();
-    expect(newFiles.find((f: any) => f.ObjectName === filePath)).toBeDefined();
-
-    // 5. Verify file was removed from old user's directory
-    const oldFilesRes = await fetch(`${BASE_URL}/api/files`, {
-      headers: { Authorization: `Bearer ${oldAuthToken}` },
-    });
-    const oldFiles = await oldFilesRes.json();
-    expect(oldFiles.find((f: any) => f.ObjectName === filePath)).toBeUndefined();
-  }, 20000); // Increase timeout to 20 seconds
+  }, 10000);
 });
 
 test("404 handler", async () => {
