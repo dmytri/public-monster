@@ -4,10 +4,11 @@ import type { Server } from "bun";
 import { startServer } from "../src/app";
 
 // --- Test Configuration ---
-const TEST_PORT = 3002;
+const TEST_PORT:number = 3002;
+const TEST_USERNAME:string = `_`;
+
 const BASE_URL = `http://localhost:${TEST_PORT}`;
-let authToken = process.env.TEST_AUTH_TOKEN || "test-token";
-let username = process.env.TEST_USERNAME || "testuser";
+
 let server: Server;
 
 // --- Test Hooks ---
@@ -16,14 +17,7 @@ beforeAll(async () => {
     "test-token": { userid: "test-user-id", username: "testuser" },
   };
 
-  server = startServer({
-    ...process.env,
-    TEST_AUTH_TOKEN: authToken,
-    TEST_USERNAME: username,
-    TEST_USER_DATA: JSON.stringify(testUserData),
-  }, TEST_PORT);
-  
-  // Wait for server to start
+  server = startServer(TEST_PORT, {'username': TEST_USERNAME});
   await Bun.sleep(100);
 });
 
@@ -48,8 +42,8 @@ test("File upload and listing through real DOM interactions", async () => {
   
   // Mock the hanko import and setup since it's an external module
   const mockHanko = {
-    getSessionToken: () => Promise.resolve(authToken),
-    getUser: () => Promise.resolve({ username }),
+    getSessionToken: () => Promise.resolve(btoa(TEST_USERNAME)),
+    getUser: () => Promise.resolve({ TEST_USERNAME }),
     onSessionCreated: () => {},
     onSessionExpired: () => {},
     onUserDeleted: () => {},
@@ -59,10 +53,10 @@ test("File upload and listing through real DOM interactions", async () => {
   (window as any).register = () => Promise.resolve({ hanko: mockHanko });
   
   // Set up the global environment similar to how the real page would
-  (window as any).hankoToken = authToken;
+  //(window as any).hankoToken = authToken;
   const usernameElement = document.getElementById('username');
   if (usernameElement) {
-    usernameElement.textContent = username;
+    usernameElement.textContent = TEST_USERNAME;
   }
   
   // Mock the loadFiles function to capture the API call
@@ -83,10 +77,6 @@ test("File upload and listing through real DOM interactions", async () => {
   // The body will automatically set the correct Content-Type for FormData
   const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-      // Don't set Content-Type manually, let FormData set it
-    },
     body: formData
   });
 
@@ -94,9 +84,6 @@ test("File upload and listing through real DOM interactions", async () => {
 
   // List files to verify the upload worked
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    }
   });
 
   expect(listResponse.status).toBe(200);
@@ -117,9 +104,6 @@ test("File deletion through real DOM interactions", async () => {
   
   const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    },
     body: formData
   });
   
@@ -127,9 +111,6 @@ test("File deletion through real DOM interactions", async () => {
   
   // Verify the file exists
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    }
   });
   
   expect(listResponse.status).toBe(200);
@@ -140,7 +121,6 @@ test("File deletion through real DOM interactions", async () => {
   const deleteResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "DELETE",
     headers: {
-      "Authorization": `Bearer ${authToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ path: "todelete.txt" })
@@ -153,9 +133,6 @@ test("File deletion through real DOM interactions", async () => {
   
   // Verify the file is gone
   const finalListResponse = await fetch(`${BASE_URL}/api/files`, {
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    }
   });
   
   expect(finalListResponse.status).toBe(200);
@@ -167,18 +144,12 @@ test("Create starter page functionality", async () => {
   // Test the starter page creation endpoint
   const starterResponse = await fetch(`${BASE_URL}/api/create-starter`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    }
   });
   
   expect(starterResponse.status).toBe(200);
   
   // Verify the starter page exists
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    }
   });
   
   expect(listResponse.status).toBe(200);
@@ -238,9 +209,6 @@ test("File listing functionality with real DOM interactions", async () => {
   
   const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    },
     body: formData
   });
   
@@ -248,9 +216,6 @@ test("File listing functionality with real DOM interactions", async () => {
   
   // Now list files to verify the upload worked via the loadFiles function
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
-    headers: {
-      "Authorization": `Bearer ${authToken}`
-    }
   });
 
     expect(listResponse.status).toBe(200);
@@ -424,7 +389,6 @@ test("File listing functionality with real DOM interactions", async () => {
     formData.append("path", "ziptest.txt");
     const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${authToken}` },
       body: formData
     });
     expect(uploadResponse.status).toBe(200);
@@ -448,9 +412,7 @@ test("File listing functionality with real DOM interactions", async () => {
       progressDiv.textContent = 'Creating zip...';
       document.body.appendChild(progressDiv);
       try {
-        const res = await fetch(`${BASE_URL}/api/files/zip`, {
-          headers: { "Authorization": `Bearer ${authToken}` }
-        });
+        const res = await fetch(`${BASE_URL}/api/files/zip`);
         if (res.ok) {
           const blob = await res.blob();
           const url = window.URL.createObjectURL(blob);

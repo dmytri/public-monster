@@ -1,25 +1,48 @@
 # Qwen Code Instructions
 
-## Core Principles
+## Environment
+**Bun + TypeScript only** - no external build tools or package managers.
 
-- **Always do the minimum work** - Focus on the essential requirements only
-- **Always confirm anything ambiguous** - Seek clarification before proceeding with unclear requirements
-- **Be very dependency adverse** - Avoid adding unnecessary dependencies; prefer existing solutions
-- **Follow YAGNI (You Aren't Gonna Need It)** - Implement only what is currently needed, not what might be needed later
-- **Do the simplest thing that could possibly work** - Choose the most straightforward solution that satisfies the requirements
-- **Always add tests** - Include tests for all implemented functionality to ensure quality and prevent regressions
-- **Follow instructions precisely** - Only implement exactly what is requested, without adding additional functionality beyond the specific request
+## Core Rules
+- **Do only what is asked** - no features, improvements, or optimizations unless explicit
+- **No boy scouting** - don't clean up or refactor existing code  
+- **No side quests** - avoid tangential features and "nice-to-haves"
+- **No defensive code** - let code fail organically to preserve clear tracebacks
+- **Confirm anything unclear** - stop and ask about ambiguity
+- **Use built-ins first** - Bun/Node APIs before packages
+- **Implement only what's needed now** - no speculative work
+- **Keep it simple** - choose simplest working solution
+- **Always include tests** - `bun test` only
 
-## Project-Specific Notes
+## Built-In APIs (Use These First)
+**Bun Native:**
+- `Bun.serve()` with declarative routing
+- Built-in cookie handling (`Request.cookies`, `Response.cookie`)
+- `Bun.file()`, `Bun.password`, `Bun.env`
+- `Bun.build()` for bundling when needed
 
-- This is a **Bun project** - Use `bun` commands instead of `npm`, `yarn`, or `pnpm`
-- Use `bun test` instead of `npm test` or other test runners
-- Use `bun run` instead of `npm run` for scripts
-- Do not use `tsc`, `npm install`, `yarn install`, or similar commands unless specifically instructed
-- The project uses Bun's native TypeScript support
-- To verify the project functionality, run the tests with `bun test` - there's no need to manually start the server as comprehensive tests cover all functionality
+**Web Standards:**
+- `fetch`, `Request/Response`, `URL`, `Headers`
+- `FormData`, `Blob`, `ReadableStream`
 
-## Important Clarification
+**Node Built-ins:**
+- `node:path`, `node:fs`, `node:crypto`, `node:url`
 
-- **Do not modify any code unless explicitly instructed by the user** - Even if you notice changes that appear to be unintentional, do not revert or fix them unless the user specifically requests it
-- The user may be making their own edits to the codebase that you are not aware of, so always confirm before making additional changes
+**No Express, Koa, cookie-parser, axios, dotenv, or similar packages.**
+
+**Exceptions:** The following packages are allowed:
+- `jose` - for JWT verification and token handling
+- `@teamhanko/hanko-elements` - for passwordless authentication UI components
+
+## Testing Rules
+- **No mocks** - use configured sandbox services for integration testing
+- **One exception**: authentication should be short-circuited, not mocked
+- All other services (DB, APIs, etc.) use real sandbox instances
+- Tests should reflect actual runtime behavior
+
+## Startup
+When you say **"hi"**, I will:
+1. **Summarize rules** in my own words
+2. **Explain project** purpose and constraints
+
+Failure to do both means I didn't read the rules.
