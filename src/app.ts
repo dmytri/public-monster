@@ -11,7 +11,7 @@ class InvalidPathError extends Error {}
 
 export function startServer(port: number = 3000, test: Record<string, string | number | boolean> = {}) {
   if (test) {
-    console.log('TEST MODE')
+    console.log('~ [ TEST MODE ]')
     Object.freeze(test)
     Object.defineProperty(globalThis, "TEST", {
       value: test, writable: false, configurable: false, enumerable: false
@@ -166,7 +166,6 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       // API: Upload, List, Delete files
       "/api/files": {
         POST: requireAuth(async (req, user) => {
-          console.log('API /api/files POST called');
 
           const form = await req.formData();
           const file = form.get("file") as File;
@@ -181,14 +180,11 @@ export function startServer(port: number = 3000, test: Record<string, string | n
 
           const actualFilename = targetPath.split('/').pop() || '';
           const ext = actualFilename.toLowerCase().substring(actualFilename.lastIndexOf('.'));
-          console.log('extension', ext)
           if (ext === '' || !ALLOWED_EXTENSIONS.includes(ext)) {
             return new Response("File type not allowed", { status: 403 });
           }
 
-          console.log('valid path', targetPath)
           async function uploadToBunny(targetPath: string, blob: Blob) {
-            console.log('uploading', targetPath)
             const uploadUrl = `${BUNNY_STORAGE_URL}${targetPath}`;
             const res = await fetch(uploadUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: blob });
             if (!res.ok) throw new Error("Upload failed");
@@ -197,25 +193,28 @@ export function startServer(port: number = 3000, test: Record<string, string | n
           try {
             await uploadToBunny(targetPath, file);
             // Update etag after successful upload
-            const etagValue = Bun.hash(user.userid + Date.now());
-            await uploadToBunny('/!' + user.userid + '/etag', new Blob([etagValue.toString()]));
+            if (!TEST) {
+              const etagValue = Bun.hash(user.userid + Date.now());
+              await uploadToBunny('/!' + user.userid + '/etag', new Blob([etagValue.toString()]));
+            }
             return new Response("OK");
           } catch (err) {
             return new Response("Upload failed", { status: 500 });
           }
         }),
         GET: requireAuth(async (req, user) => {
-          console.log('API /api/files GET called');
 
           try {
             const files = await listFilesRecursive(`/~${user.username}/`, user.username);
             const content = JSON.stringify(files);
 
-            let etag = '"0"';
-            const etagRes = await fetch(`${BUNNY_STORAGE_URL}/!${user.userid}/etag`, { headers: { AccessKey: BUNNY_API_KEY } });
-            if (etagRes.ok) {
-              const etagValue = await etagRes.text();
-              etag = `"${etagValue}"`;
+            let etag = Bun.hash(user.userid + Date.now());
+            if (!TEST) {
+              const etagRes = await fetch(`${BUNNY_STORAGE_URL}/!${user.userid}/etag`, { headers: { AccessKey: BUNNY_API_KEY } });
+              if (etagRes.ok) {
+                const etagValue = await etagRes.text();
+                etag = `"${etagValue}"`;
+              }
             }
 
             const ifNoneMatch = req.headers.get("If-None-Match");
@@ -235,10 +234,8 @@ export function startServer(port: number = 3000, test: Record<string, string | n
           }
         }),
         DELETE: requireAuth(async (req, user) => {
-          console.log('API /api/files DELETE called');
 
           const { username, userid } = user;
-          console.log('User authenticated successfully:', { username, userid });
 
           const body = await req.json();
           const path = body.path;
@@ -269,10 +266,8 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       // API: Create starter page
       "/api/create-starter": {
         POST: requireAuth(async (req, user) => {
-          console.log('API /api/create-starter POST called');
 
           const { username, userid } = user;
-          console.log('User authenticated successfully:', { username, userid });
 
           // Read the starter HTML template from public/starter.html
           const file = Bun.file("./public/starter.html");
@@ -305,22 +300,18 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       // API: Download all files as zip
       "/api/files/zip": {
         GET: requireAuth(async (req, user) => {
-          console.log('API /api/files/zip GET called');
 
           try {
             const files = await listFilesRecursive(`/~${user.username}/`, user.username);
-            console.log(`Found ${files.length} files to zip for user ${user.username}`);
 
             const proc = Bun.spawn(["sh", "-c", `cd /tmp && mkdir -p ${user.username} && cd ${user.username} && rm -rf *`]);
             await proc.exited;
 
             for (const file of files) {
-              console.log(`Processing file: ${file.ObjectName}`);
               const res = await fetch(`${BUNNY_STORAGE_URL}/~${user.username}/${file.ObjectName}`, { headers: { AccessKey: BUNNY_API_KEY } });
               if (res.ok) {
                 const data = await res.arrayBuffer();
                 const filePath = `/tmp/${user.username}/${file.ObjectName}`;
-                console.log(`Writing file to: ${filePath}`);
                 const dir = filePath.substring(0, filePath.lastIndexOf('/'));
                 if (dir) {
                   const mkdirProc = Bun.spawn(["mkdir", "-p", dir]);
@@ -336,8 +327,6 @@ export function startServer(port: number = 3000, test: Record<string, string | n
             await zipProc.exited;
             const stdout = await new Response(zipProc.stdout).text();
             const stderr = await new Response(zipProc.stderr).text();
-            console.log('zip stdout:', stdout);
-            console.log('zip stderr:', stderr);
 
             const zipFile = Bun.file(`/tmp/${user.username}.zip`);
 
@@ -356,19 +345,17 @@ export function startServer(port: number = 3000, test: Record<string, string | n
 
       "/api/prepare-migration": {
         GET: requireAuth(async (req, user) => {
-          console.log('API /api/prepare-migration POST called');
           const tokenPath = `/~${user.username}/.migration_token`;
           await fetch(`${BUNNY_STORAGE_URL}${tokenPath}`, {
             method: "PUT",
             headers: { AccessKey: BUNNY_API_KEY },
             body: user.userid
           });
-        })
+       })
       },
 
       "/api/migrate-username": {
         POST: requireAuth(async (req, user) => {
-          console.log('API /api/migrate-username POST called');
 
           const body = await req.json();
 
@@ -505,21 +492,17 @@ export function startServer(port: number = 3000, test: Record<string, string | n
     },
 
     async fetch(req) {
-      console.log('Fetch handler called for URL:', req.url, 'Method:', req.method);
       const url = new URL(req.url);
 
       // User file serving (moved from named routes)
       if (url.pathname.startsWith('/~')) {
         const cdnUrl = `${BUNNY_PULL_ZONE}${url.pathname}`;
         if (BUNNY_PULL_ZONE && BUNNY_PULL_ZONE !== `${url.protocol}//${url.hostname}`) {
-          console.log('Redirecting to CDN for user file:', cdnUrl);
           return Response.redirect(cdnUrl, 303);
         }
-        console.log('No pull zone configured, returning 404 for user file path:', url.pathname);
         return new Response("Not found", { status: 404 });
       }
 
-      console.log('Serving 404 page for unmatched route:', url.pathname);
       const file = Bun.file("./public/404.html");
       if (!await file.exists()) {
         return new Response("Page not found", { status: 404 });

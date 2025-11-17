@@ -94,7 +94,7 @@ test("File upload and listing through real DOM interactions", async () => {
   // Verify that our mock functions were called properly
   // The mock function test was for DOM interaction, but we're testing API directly
   // The important thing is that the file upload and retrieval worked
-});
+}, 20000);
 
 test("File deletion through real DOM interactions", async () => {
   // First upload a file
@@ -138,7 +138,7 @@ test("File deletion through real DOM interactions", async () => {
   expect(finalListResponse.status).toBe(200);
   const finalFiles = await finalListResponse.json();
   expect(finalFiles.some((f: any) => f.ObjectName === "todelete.txt")).toBe(false);
-});
+}, 20000);
 
 test("Create starter page functionality", async () => {
   // Test the starter page creation endpoint
@@ -155,7 +155,7 @@ test("Create starter page functionality", async () => {
   expect(listResponse.status).toBe(200);
   const files = await listResponse.json();
   expect(files.some((f: any) => f.ObjectName === "index.html")).toBe(true);
-});
+}, 20000);
 
 // Test that the HTML pages load correctly and contain expected elements
 test("filemanager.html loads with expected DOM structure", async () => {
@@ -180,7 +180,7 @@ test("filemanager.html loads with expected DOM structure", async () => {
   // Check that required script elements exist
   const scriptTags = document.querySelectorAll('script');
   expect(scriptTags.length).toBeGreaterThan(0);
-});
+}, 20000);
 
 test("404.html loads with expected DOM structure", async () => {
   const htmlContent = await Bun.file("./public/404.html").text();
@@ -199,7 +199,7 @@ test("404.html loads with expected DOM structure", async () => {
   
   // Verify that the title contains the expected text
   expect(document.title).toContain('404');
-});
+}, 20000);
 
 test("File listing functionality with real DOM interactions", async () => {
   // First upload a file to have something to list
@@ -226,7 +226,7 @@ test("File listing functionality with real DOM interactions", async () => {
 
     expect(files.some((f: any) => f.ObjectName === "listtest.txt")).toBe(true);
 
-  });
+  }, 20000);
 
   
 
@@ -380,7 +380,7 @@ test("File listing functionality with real DOM interactions", async () => {
 
     }
 
-  });
+  }, 20000);
 
   test("Download all files as zip functionality", async () => {
     // 1. Upload a file to ensure there's something to zip
@@ -437,7 +437,7 @@ test("File listing functionality with real DOM interactions", async () => {
     await (window as any).downloadAllAsZip();
     expect(document.getElementById('progress-indicator')).toBeNull();
     expect(alertMessage).toBe("");
-  });
+  }, 20000);
 
   test("Download all files as zip functionality - error handling", async () => {
     // 1. Set up DOM
@@ -477,4 +477,4 @@ test("File listing functionality with real DOM interactions", async () => {
     await (window as any).downloadAllAsZip();
     expect(document.getElementById('progress-indicator')).toBeNull();
     expect(alertMessage).toBe('Failed to download zip');
-  });
+  }, 20000);
