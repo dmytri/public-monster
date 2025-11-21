@@ -272,3 +272,31 @@ test("404 handler", async () => {
     const text = await res.text();
     expect(text).toContain("PAGE NOT FOUND");
 });
+
+// Testing new static pages
+test("GET /tos - serves Terms of Service page", async () => {
+  const res = await fetch(`${BASE_URL}/tos`);
+  expect(res.status).toBe(200);
+  const text = await res.text();
+  expect(text).toContain("Terms of Service");
+  expect(text).toContain("public.monster Terms of Service");
+  expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
+}, 9000);
+
+test("GET /privacy-policy - serves Privacy Policy page", async () => {
+  const res = await fetch(`${BASE_URL}/privacy-policy`);
+  expect(res.status).toBe(200);
+  const text = await res.text();
+  expect(text).toContain("Privacy Policy");
+  expect(text).toContain("We think the web should be a fun, creative place");
+  expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
+}, 9000);
+
+test("GET /content-moderation - serves Content Moderation Policy page", async () => {
+  const res = await fetch(`${BASE_URL}/content-moderation`);
+  expect(res.status).toBe(200);
+  const text = await res.text();
+  expect(text).toContain("Content Moderation Policy");
+  expect(text).toContain("Our Philosophy: Creative Freedom Meets Community Care");
+  expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
+}, 9000);

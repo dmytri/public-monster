@@ -8,6 +8,9 @@ export async function serveStaticPage(pageName: string, HANKO_API_URL: string): 
     '/faq': './public/faq.html',
     '/public_html': './public/filemanager.html',
     '/profile': './public/profile.html',
+    '/tos': './public/tos.html',
+    '/privacy-policy': './public/privacy-policy.html',
+    '/content-moderation': './public/content-moderation.html',
   };
 
   const filePath = pageMap[pageName];

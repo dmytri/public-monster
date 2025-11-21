@@ -24,7 +24,7 @@ declare global {
 }
 
 export function startServer(port: number = 3000, test: Record<string, string | number | boolean> = {}) {
-  if (test) {
+  if (!!Object.keys(test).length) {
     console.log('~ [ TEST MODE ]')
     Object.freeze(test)
     Object.defineProperty(globalThis, "TEST", {
@@ -99,6 +99,18 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         return serveStaticPage('/profile', HANKO_API_URL);
       },
 
+      "/tos": async () => {
+        return serveStaticPage('/tos', HANKO_API_URL);
+      },
+
+      "/privacy-policy": async () => {
+        return serveStaticPage('/privacy-policy', HANKO_API_URL);
+      },
+
+      "/content-moderation": async () => {
+        return serveStaticPage('/content-moderation', HANKO_API_URL);
+      },
+
       "/404": async () => {
         return serve404Page(HANKO_API_URL);
       },
@@ -113,6 +125,11 @@ export function startServer(port: number = 3000, test: Record<string, string | n
 
       if (url.pathname.startsWith('/~')) {
         return Response.redirect(`${BUNNY_PULL_ZONE}${url.pathname}`, 303);
+      }
+
+      // Check if the requested path is one of our static pages
+      if (['/tos', '/privacy-policy', '/content-moderation'].includes(url.pathname)) {
+        return serveStaticPage(url.pathname, HANKO_API_URL);
       }
 
       return serve404Page(HANKO_API_URL);
