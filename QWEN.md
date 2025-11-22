@@ -31,8 +31,8 @@
 **No Express, Koa, cookie-parser, axios, dotenv, or similar packages.**
 
 **Exceptions:** The following packages are allowed:
-- `jose` - for JWT verification and token handling
 - `@teamhanko/hanko-elements` - for passwordless authentication UI components
+- `htmlhint` - for HTML linting
 
 ## Testing Rules
 - **No mocks** - use configured sandbox services for integration testing
@@ -43,6 +43,6 @@
 ## Startup
 When you say **"hi"**, I will:
 1. **Summarize rules** in my own words
-2. **Explain project** purpose and constraints
+2. **Explain project** examine repo and explain purpose
 
 Failure to do both means I didn't read the rules.
