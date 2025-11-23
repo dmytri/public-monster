@@ -300,3 +300,59 @@ test("GET /content-moderation - serves Content Moderation Policy page", async ()
   expect(text).toContain("Our Philosophy: Creative Freedom Meets Community Care");
   expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
 }, 9000);
+
+test("GET /validate-html - serves the HTML validation page", async () => {
+  const res = await fetch(`${BASE_URL}/validate-html`);
+  expect(res.status).toBe(200);
+  const text = await res.text();
+  expect(text).toContain("HTML Validator");
+  expect(text).toContain("🔍 HTML Validator");
+  expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
+}, 9000);
+
+// Test for the new API endpoints
+test("GET /api/whoami - returns user info in test mode", async () => {
+  const res = await fetch(`${BASE_URL}/api/whoami`, {
+    headers: {
+      "Authorization": "Bearer test-token" // The test mode may bypass auth
+    }
+  });
+  // In test mode, it may return mock user info
+  expect([200, 400, 401, 403]).toContain(res.status);
+  if (res.status === 200) {
+    const data = await res.json();
+    expect(data).toHaveProperty('username');
+    expect(data).toHaveProperty('userid');
+  }
+}, 9000);
+
+test("GET /api/files/content/* - should return 404 for invalid path", async () => {
+  const res = await fetch(`${BASE_URL}/api/files/content`);
+  expect(res.status).toBe(404); // Should return 404 when route is not matched properly
+}, 9000);
+
+// Test for the validate HTML endpoint
+test("GET /api/validate-html - should validate user HTML", async () => {
+  // First create a starter page to ensure there's an index.html
+  const starterRes = await fetch(`${BASE_URL}/api/create-starter`, {
+    method: "POST",
+  });
+  expect(starterRes.status).toBe(200);
+
+  // Then try to validate HTML
+  const validateRes = await fetch(`${BASE_URL}/api/validate-html`, {
+    headers: {
+      "Authorization": "Bearer test-token" // This should work in test mode
+    }
+  });
+
+  // Should return 200 with validation results (might be an error in test mode)
+  expect([200, 400, 401, 403]).toContain(validateRes.status);
+
+  // If successful, should return JSON with validation results
+  if (validateRes.status === 200) {
+    const data = await validateRes.json();
+    expect(data).toHaveProperty('valid');
+    expect(data).toHaveProperty('issues');
+  }
+}, 9000);

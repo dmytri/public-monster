@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.bunny.net">
+  <link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
+  <title>HTML Validator - public.monster</title>
+  <style>
+    body {
+      background: #008080;
+      color: #000;
+      font-family: "Comic Neue", "Comic Sans MS", cursive;
+      margin: 20px;
+    }
+    
+    main {
+      background: #c0c0c0;
+      border: 4px outset #fff;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    h1 {
+      color: #ff00ff;
+      font-family: Anton, Impact, "Arial Black", sans-serif;
+      text-shadow: 3px 3px 0 #000, 5px 5px 10px rgba(0,0,0,0.5);
+      font-size: 2.5em;
+      margin: 0;
+      letter-spacing: 1px;
+    }
+
+    h2 {
+      color: #000;
+      background: #ff0;
+      padding: 5px 10px;
+      display: inline-block;
+    }
+
+    .result-section {
+      margin: 15px 0;
+      padding: 10px;
+      border: 2px inset #999;
+      background: #fff;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .error { 
+      color: #f00; 
+      background: #ffb6c1; 
+      padding: 5px; 
+      margin: 5px 0; 
+      border: 1px solid #f00;
+    }
+    
+    .warning { 
+      color: #000; 
+      background: #ffffe0; 
+      padding: 5px; 
+      margin: 5px 0; 
+      border: 1px solid #ffa500;
+    }
+
+    .success { 
+      color: #008000; 
+      background: #98FB98; 
+      padding: 5px; 
+      margin: 5px 0; 
+      border: 1px solid #008000;
+    }
+    
+    a {
+      color: #00f;
+      text-decoration: underline;
+    }
+    
+    .loading {
+      display: block;
+      color: #008000;
+      font-weight: bold;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <main role="main">
+    <h1>🔍 HTML Validator</h1>
+    
+    <p>Check your HTML code for errors and get suggestions for improvements! This tool helps make your web pages more beginner-friendly.</p>
+    
+    <div id="loading" class="loading">⏳ Loading and validating your HTML...</div>
+    
+    <h2>Validation Results</h2>
+    <div id="validationResults" class="result-section">
+      <p>Your validation results will appear here.</p>
+    </div>
+
+    <p><a href="/">← Back to Dashboard</a></p>
+  </main>
+
+  <script>
+    // Function to validate HTML automatically when page loads
+    async function validateUserHTML() {
+      try {
+        // Get the session token
+        let token = null;
+        try {
+          // Attempt to get token via Hanko
+          if (window.hanko) {
+            token = await window.hanko.getSessionToken();
+          } else {
+            // Fallback: check if token is available in global scope
+            token = window.hankoToken;
+          }
+        } catch (e) {
+          console.log("Hanko not initialized, trying fetch without auth");
+        }
+
+        // Check if there's a specific file to validate in the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const filePath = urlParams.get('file');
+
+        let apiUrl = '/api/validate-html';
+        if (filePath) {
+          apiUrl += `?file=${encodeURIComponent(filePath)}`;
+        }
+
+        // Fetch and validate the user's HTML content
+        const validateRes = await fetch(apiUrl, {
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+
+        if (validateRes.ok) {
+          const results = await validateRes.json();
+          displayValidationResults(results);
+        } else if (validateRes.status === 404) {
+          document.getElementById('validationResults').innerHTML =
+            '<div class="error">No index.html file found to validate. Please upload an index.html file first.</div>' +
+            '<p><a href="/">← Go to Dashboard to upload files</a></p>';
+        } else {
+          document.getElementById('validationResults').innerHTML =
+            `<div class="error">Could not validate your HTML: ${validateRes.status} ${validateRes.statusText}</div>`;
+        }
+      } catch (error) {
+        console.error('Error validating HTML:', error);
+        document.getElementById('validationResults').innerHTML =
+          `<div class="error">Error validating HTML: ${error.message}</div>`;
+      } finally {
+        // Hide loading indicator
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    // Display validation results in a user-friendly format
+    function displayValidationResults(results) {
+      if (results.valid) {
+        document.getElementById('validationResults').innerHTML =
+          '<div class="success">✅ Your HTML looks good! No major issues found.</div>' +
+          '<div class="success">✨ Your page is beginner-friendly! ✨</div>';
+      } else {
+        let resultHTML = '<h3>Issues Found:</h3><ul>';
+
+        // Group messages by severity
+        const errors = results.issues.filter(issue => issue.type.toLowerCase() === 'error');
+        const warnings = results.issues.filter(issue => issue.type.toLowerCase() !== 'error');
+
+        // Display errors first
+        errors.forEach(issue => {
+          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${issue.message} at line ${issue.line}, col ${issue.column}<br>`;
+          if (issue.codeSnippet) {
+            resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
+          }
+          resultHTML += '</li>';
+        });
+
+        // Then warnings
+        warnings.forEach(issue => {
+          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${issue.message} at line ${issue.line}, col ${issue.column}<br>`;
+          if (issue.codeSnippet) {
+            resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
+          }
+          resultHTML += '</li>';
+        });
+
+        resultHTML += '</ul>';
+
+        // Add a summary at the top
+        const errorCount = errors.length;
+        const warningCount = warnings.length;
+        const totalCount = results.issues.length;
+
+        resultHTML = `<div class="error">Found ${totalCount} issue${totalCount !== 1 ? 's' : ''} (${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warningCount} warning${warningCount !== 1 ? 's' : ''})</div>` + resultHTML;
+
+        // Add a tip about HTML structure for beginners
+        if (errors.length > 0 || warnings.length > 0) {
+          resultHTML += '<div class="warning"><h3>💡 HTML Tips for Beginners:</h3>' +
+            '<ul>' +
+            '<li>HTML tags must be properly closed (e.g., &lt;p&gt;Content&lt;/p&gt;)</li>' +
+            '<li>Always include alt attributes for images: &lt;img src="image.jpg" alt="Description"&gt;</li>' +
+            '<li>Use double quotes for attribute values: &lt;a href="page.html"&gt;</li>' +
+            '<li>HTML tag names should be lowercase: &lt;p&gt; not &lt;P&gt;</li>' +
+            '</ul></div>';
+        }
+
+        document.getElementById('validationResults').innerHTML = resultHTML;
+      }
+    }
+
+    // Helper function to escape HTML for display
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Initialize by validating the user's HTML on page load
+    window.addEventListener('DOMContentLoaded', (event) => {
+      validateUserHTML();
+    });
+  </script>
+</body>
+</html>

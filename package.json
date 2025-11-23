@@ -8,8 +8,7 @@
     "test:e2e": "bun test tests/e2e.test.ts"
   },
   "dependencies": {
-    "@teamhanko/hanko-elements": "^2.2.1",
-    "jose": "^6.1.1"
+    "@teamhanko/hanko-elements": "^2.2.1"
   },
   "devDependencies": {
     "@types/bun": "^1.3.2",

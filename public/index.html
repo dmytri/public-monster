@@ -65,7 +65,7 @@ const showUpload = async (userId) => {
   document.getElementById('upload').style.display = 'block';
   document.getElementById('link').href = '/~' + userId + '/';
   document.getElementById('link').textContent = '/~' + userId + '/';
-  
+
   // Check if index.html exists
   try {
     const res = await fetch('/api/files', {
@@ -75,6 +75,7 @@ const showUpload = async (userId) => {
       const files = await res.json();
       const hasIndex = files.some(f => f.ObjectName === 'index.html');
       document.getElementById('starterSection').style.display = hasIndex ? 'none' : 'block';
+      document.getElementById('validateSection').style.display = hasIndex ? 'block' : 'none';
     }
   } catch (e) {
     console.error('Failed to check for index.html', e);
@@ -148,10 +149,16 @@ a{color:#00f;text-decoration:underline}
 <button type="submit" id="btn">🚀 Upload</button>
 <p id="status"></p>
 </form>
-<p id="starterSection" style="display:none">
-<button type="button" id="createStarter">✨ Create Starter Page</button>
-<span id="starterStatus"></span>
-</p>
+<div id="actionButtons" style="display:flex; gap:10px; flex-wrap:wrap;">
+  <p id="starterSection" style="display:none">
+    <button type="button" id="createStarter">✨ Create Starter Page</button>
+    <span id="starterStatus"></span>
+  </p>
+  <p id="validateSection" style="display:none">
+    <button type="button" id="validateHtml">🔍 Validate HTML</button>
+    <span id="validateStatus"></span>
+  </p>
+</div>
 <p><strong>Your site:</strong> <a href="#" id="link"></a></p>
 <p><a href="/public_html">📁 public_html</a> | <a href="/profile">👤 Profile</a> | <a href="#" id="logout-link">🚪 Log out</a></p>
 </div>
@@ -268,19 +275,20 @@ form.addEventListener('submit', async (e) => {
 document.getElementById('createStarter')?.addEventListener('click', async () => {
   const btn = document.getElementById('createStarter');
   const status = document.getElementById('starterStatus');
-  
+
   btn.disabled = true;
   status.textContent = ' ⏳ Creating...';
-  
+
   try {
     const res = await fetch('/api/create-starter', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + window.hankoToken }
     });
-    
+
     if (res.ok) {
       status.textContent = ' ✅ Created!';
       document.getElementById('starterSection').style.display = 'none';
+      document.getElementById('validateSection').style.display = 'block';
       setTimeout(() => {
         window.location.href = document.getElementById('link').href;
       }, 1000);
@@ -292,6 +300,12 @@ document.getElementById('createStarter')?.addEventListener('click', async () => 
     status.textContent = ' ❌ Error';
     btn.disabled = false;
   }
+});
+
+// Validate HTML button handler
+document.getElementById('validateHtml')?.addEventListener('click', async () => {
+  // Navigate to the HTML validation page
+  window.location.href = '/validate-html';
 });
 
 window.hankoToken = null;

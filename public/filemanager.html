@@ -186,11 +186,23 @@ function renderNode(name, node, prefix, isLast, token) {
     deleteBtn.style.fontSize = '0.9em';
     deleteBtn.title = 'Delete file';
     deleteBtn.onclick = () => deleteFile(node.path, token);
-    
+
+    // Add validation icon for HTML files
+    let validateBtn = null;
+    if (name.toLowerCase().endsWith('.html') || name.toLowerCase().endsWith('.htm')) {
+      validateBtn = document.createElement('span');
+      validateBtn.textContent = ' ✅';
+      validateBtn.style.cursor = 'pointer';
+      validateBtn.style.fontSize = '0.9em';
+      validateBtn.title = 'Validate HTML';
+      validateBtn.onclick = () => validateHtmlFile(node.path, token);
+    }
+
     line.appendChild(prefixSpan);
     line.appendChild(link);
     line.appendChild(timestamp);
     line.appendChild(size);
+    if (validateBtn) line.appendChild(validateBtn);
     line.appendChild(deleteBtn);
     line.appendChild(viewIcon);
     lines.push(line);
@@ -441,6 +453,11 @@ async function deleteFile(path, token) {
   } else {
     alert('Delete failed');
   }
+}
+
+async function validateHtmlFile(path, token) {
+  // Navigate to the validation page, passing the file path as a query parameter
+  window.open(`/validate-html?file=${encodeURIComponent(path)}`, '_blank');
 }
 </script>
 <style>

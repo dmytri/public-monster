@@ -4,10 +4,13 @@
 import { validateEnvironmentVariables, MAX_FILE_SIZE, ALLOWED_EXTENSIONS } from './utils/config';
 import { requireAuth, getUserInfo } from './utils/auth';
 import { InvalidPathError } from './utils/paths';
-import { 
-  uploadFileHandler, 
-  listFilesHandler, 
-  deleteFileHandler 
+import {
+  uploadFileHandler,
+  listFilesHandler,
+  deleteFileHandler,
+  getFileContentHandler,
+  validateHtmlHandler,
+  getValidationReportHandler
 } from './handlers/api/files';
 import { createStarterPageHandler } from './handlers/api/starter';
 import { prepareMigrationHandler, migrateUsernameHandler } from './handlers/api/migration';
@@ -57,6 +60,39 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       "/api/create-starter": {
         POST: requireAuth(async (req, user) => {
           return createStarterPageHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
+        }, HANKO_API_URL)
+      },
+
+      // API: Get file content
+      "/api/files/content/*": {
+        GET: requireAuth(async (req, user) => {
+          return getFileContentHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
+        }, HANKO_API_URL)
+      },
+
+      // API: Validate HTML
+      "/api/validate-html": {
+        GET: requireAuth(async (req, user) => {
+          return validateHtmlHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
+        }, HANKO_API_URL)
+      },
+
+      // API: Get validation report
+      "/api/validation-report": {
+        GET: requireAuth(async (req, user) => {
+          return getValidationReportHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
+        }, HANKO_API_URL)
+      },
+
+      // API: Get user info
+      "/api/whoami": {
+        GET: requireAuth(async (req, user) => {
+          return new Response(JSON.stringify({
+            userid: user.userid,
+            username: user.username
+          }), {
+            headers: { "Content-Type": "application/json" }
+          });
         }, HANKO_API_URL)
       },
 
@@ -111,6 +147,10 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         return serveStaticPage('/content-moderation', HANKO_API_URL);
       },
 
+      "/validate-html": async () => {
+        return serveStaticPage('/validate-html', HANKO_API_URL);
+      },
+
       "/404": async () => {
         return serve404Page(HANKO_API_URL);
       },
@@ -128,7 +168,7 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       }
 
       // Check if the requested path is one of our static pages
-      if (['/tos', '/privacy-policy', '/content-moderation'].includes(url.pathname)) {
+      if (['/tos', '/privacy-policy', '/content-moderation', '/validate-html'].includes(url.pathname)) {
         return serveStaticPage(url.pathname, HANKO_API_URL);
       }
 

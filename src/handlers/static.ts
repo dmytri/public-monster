@@ -11,6 +11,7 @@ export async function serveStaticPage(pageName: string, HANKO_API_URL: string): 
     '/tos': './public/tos.html',
     '/privacy-policy': './public/privacy-policy.html',
     '/content-moderation': './public/content-moderation.html',
+    '/validate-html': './public/validate-html.html',
   };
 
   const filePath = pageMap[pageName];
