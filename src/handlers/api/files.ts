@@ -2,159 +2,53 @@
 import * as FilePath from 'path';
 import { storagePath } from '../../utils/paths';
 import { MAX_FILE_SIZE, ALLOWED_EXTENSIONS } from '../../utils/config';
+import * as HTMLHintModule from 'htmlhint';
 
-// Basic HTML validation function
+// Basic HTML validation function using htmlhint
 export function validateHtml(html: string): { valid: boolean; issues: Array<{ type: string; message: string; line: number; column: number; codeSnippet: string }> } {
-  const issues: Array<{ type: string; message: string; line: number; column: number; codeSnippet: string }> = [];
+  // Access the actual HTMLHint object
+  const HTMLHintActual = HTMLHintModule.HTMLHint;
 
-  // Check for basic structural issues
-  const lines = html.split('\n');
-
-  // Look for unclosed tags - enhanced with position tracking
-  const tags: Array<{ name: string; line: number; column: number; code: string }> = [];
-  const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)/g;
-  let match;
-
-  // Create a mapping from position to line/column number
-  const posToLineCol = (pos: number): { line: number; col: number } => {
-    let line = 0;
-    let col = 0;
-    let currentPos = 0;
-
-    for (const [idx, lineStr] of lines.entries()) {
-      if (currentPos + lineStr.length >= pos) {
-        line = idx;
-        col = pos - currentPos;
-        break;
-      }
-      currentPos += lineStr.length + 1; // +1 for newline character
-    }
-
-    return { line: line + 1, col }; // Adding 1 to line to make it 1-indexed
+  // Load htmlhint configuration from .htmlhintrc file
+  const ruleset = {
+    "tagname-lowercase": true,
+    "attr-lowercase": true,
+    "attr-value-double-quotes": true,
+    "html-lang-require": true,
+    "doctype-first": true,
+    "head-script-disabled": true,
+    "style-disabled": false,
+    "inline-style-disabled": false,
+    "id-class-value": "dash",
+    "alt-require": true,
+    "attr-no-duplication": true,
+    "title-require": true,
+    "tag-pair": true,
+    "spec-char-escape": true,
+    "id-unique": true,
+    "src-require": true,
+    "attr-unsafe-chars": true,
+    "attr-whitespace": true
   };
 
-  // Reset regex to search from beginning
-  tagRegex.lastIndex = 0;
-  while ((match = tagRegex.exec(html)) !== null) {
-    const tagName = match[1].toLowerCase();
-    const posInfo = posToLineCol(match.index);
+  // Run htmlhint on the HTML content
+  const messages = HTMLHintActual.verify(html, ruleset);
 
-    // Get a code snippet around the tag
-    const snippet = getSnippetAroundPos(lines, match.index, 100);
-
-    if (match[0].startsWith('</')) {
-      // Closing tag - check if there's a matching opening tag
-      const lastTag = tags.pop();
-      if (lastTag && lastTag.name !== tagName) {
-        // Simple check: if we're closing a tag that wasn't opened
-        issues.push({
-          type: 'error',
-          message: `Possible mismatch: expected closing tag for '${lastTag.name}', got closing tag for '${tagName}'`,
-          line: posInfo.line,
-          column: posInfo.col,
-          codeSnippet: snippet
-        });
-      } else if (!lastTag) {
-        // No opening tag for this closing tag
-        issues.push({
-          type: 'error',
-          message: `Unmatched closing tag '${tagName}'`,
-          line: posInfo.line,
-          column: posInfo.col,
-          codeSnippet: snippet
-        });
-      }
-    } else {
-      // Opening tag - check if it's self-closing
-      const selfClosingTags = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
-      if (!selfClosingTags.includes(tagName)) {
-        tags.push({
-          name: tagName,
-          line: posInfo.line,
-          column: posInfo.col,
-          code: snippet
-        });
-      }
-    }
-  }
-
-  // Report any unclosed tags
-  for (const tag of tags) {
-    issues.push({
-      type: 'error',
-      message: `Unclosed tag '${tag.name}'`,
-      line: tag.line,
-      column: tag.column,
-      codeSnippet: tag.code
-    });
-  }
-
-  // Check for missing alt attributes in img tags with position tracking
-  const imgRegex = /<img\s+([^>]*?)>/gi;
-  imgRegex.lastIndex = 0;
-  while ((match = imgRegex.exec(html)) !== null) {
-    const posInfo = posToLineCol(match.index);
-    const imgTag = match[0].toLowerCase();
-    const snippet = getSnippetAroundPos(lines, match.index, 100);
-
-    if (!imgTag.includes('alt=')) {
-      issues.push({
-        type: 'warning',
-        message: 'Image tag missing alt attribute',
-        line: posInfo.line,
-        column: posInfo.col,
-        codeSnippet: snippet
-      });
-    }
-  }
-
-  // Check for proper attribute quotes with position tracking
-  const unquotedAttrRegex = /<[^>]*[a-zA-Z]+=[^"'][^>\s]*[^"'\s>]/g;
-  unquotedAttrRegex.lastIndex = 0;
-  while ((match = unquotedAttrRegex.exec(html)) !== null) {
-    const posInfo = posToLineCol(match.index);
-    const snippet = getSnippetAroundPos(lines, match.index, 100);
-
-    issues.push({
-      type: 'warning',
-      message: 'Attribute without quotes',
-      line: posInfo.line,
-      column: posInfo.col,
-      codeSnippet: snippet
-    });
-  }
+  // Convert htmlhint messages to our format
+  const issues = messages.map(msg => {
+    return {
+      type: msg.type.toLowerCase(), // error, warning
+      message: msg.message,
+      line: msg.line || 0,
+      column: msg.col || 0,
+      codeSnippet: msg.raw || ''
+    };
+  });
 
   return {
     valid: issues.length === 0,
     issues: issues
   };
-}
-
-// Helper function to extract code snippet around a specific position
-function getSnippetAroundPos(lines: string[], pos: number, maxLength: number): string {
-  // Find which line and col the position is at
-  let currentPos = 0;
-  let lineIndex = 0;
-  let colIndex = 0;
-
-  for (const [idx, line] of lines.entries()) {
-    if (currentPos + line.length >= pos) {
-      lineIndex = idx;
-      colIndex = pos - currentPos;
-      break;
-    }
-    currentPos += line.length + 1; // +1 for newline character
-  }
-
-  // Get the line containing the position
-  if (lineIndex < lines.length) {
-    const line = lines[lineIndex];
-    const start = Math.max(0, colIndex - Math.floor(maxLength / 2));
-    const end = Math.min(line.length, start + maxLength);
-    return line.substring(start, end).trim();
-  }
-
-  return '';
 }
 
 export async function listFilesRecursive(
