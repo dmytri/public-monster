@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="preconnect" href="https://fonts.bunny.net">
   <link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
+  <!-- Prism.js CSS -->
+  <link href="/assets/prismjs/themes/prism.css" rel="stylesheet" />
   <title>HTML Validator - public.monster</title>
   <style>
     body {
@@ -13,7 +15,7 @@
       font-family: "Comic Neue", "Comic Sans MS", cursive;
       margin: 20px;
     }
-    
+
     main {
       background: #c0c0c0;
       border: 4px outset #fff;
@@ -48,35 +50,35 @@
       overflow-y: auto;
     }
 
-    .error { 
-      color: #f00; 
-      background: #ffb6c1; 
-      padding: 5px; 
-      margin: 5px 0; 
+    .error {
+      color: #f00;
+      background: #ffb6c1;
+      padding: 5px;
+      margin: 5px 0;
       border: 1px solid #f00;
     }
-    
-    .warning { 
-      color: #000; 
-      background: #ffffe0; 
-      padding: 5px; 
-      margin: 5px 0; 
+
+    .warning {
+      color: #000;
+      background: #ffffe0;
+      padding: 5px;
+      margin: 5px 0;
       border: 1px solid #ffa500;
     }
 
-    .success { 
-      color: #008000; 
-      background: #98FB98; 
-      padding: 5px; 
-      margin: 5px 0; 
+    .success {
+      color: #008000;
+      background: #98FB98;
+      padding: 5px;
+      margin: 5px 0;
       border: 1px solid #008000;
     }
-    
+
     a {
       color: #00f;
       text-decoration: underline;
     }
-    
+
     .loading {
       display: block;
       color: #008000;
@@ -84,16 +86,54 @@
       text-align: center;
       padding: 20px;
     }
+
+    .view-source-btn {
+      background: #008000;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 10px 0;
+      cursor: pointer;
+      border: 2px outset #fff;
+      font-family: "Comic Neue", "Comic Sans MS", cursive;
+      font-weight: bold;
+    }
+
+    .view-source-btn:hover {
+      background: #006400;
+    }
+
+    .source-code-container {
+      display: none;
+      margin-top: 15px;
+      border: 2px inset #999;
+      background: #fff;
+    }
+
+    pre[class*="language-"] {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 1em;
+      overflow: auto;
+      background: #f4f4f4;
+    }
   </style>
 </head>
 <body>
   <main role="main">
     <h1>🔍 HTML Validator</h1>
-    
+
     <p>Check your HTML code for errors and get suggestions for improvements! This tool helps make your web pages more beginner-friendly.</p>
     
     <div id="loading" class="loading">⏳ Loading and validating your HTML...</div>
-    
+
+    <button id="viewSourceBtn" class="view-source-btn">👀 View Source</button>
+
+    <div id="sourceCodeContainer" class="source-code-container">
+      <h3>HTML Source Code:</h3>
+      <div id="sourceCodeContent" class="result-section"></div>
+    </div>
+
     <h2>Validation Results</h2>
     <div id="validationResults" class="result-section">
       <p>Your validation results will appear here.</p>
@@ -136,6 +176,20 @@
 
         if (validateRes.ok) {
           const results = await validateRes.json();
+
+          // Also fetch the HTML source code to display
+          const sourceRes = await fetch(`/api/files/content/${filePath || 'index.html'}`, {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+          });
+
+          if (sourceRes.ok) {
+            const sourceCode = await sourceRes.text();
+            displaySourceCode(sourceCode);
+          } else {
+            // Even if source code retrieval fails, still show validation results
+            console.error('Failed to fetch source code:', sourceRes.status, await sourceRes.text());
+          }
+
           displayValidationResults(results);
         } else if (validateRes.status === 404) {
           document.getElementById('validationResults').innerHTML =
@@ -152,6 +206,39 @@
       } finally {
         // Hide loading indicator
         document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    // Display the HTML source code with syntax highlighting
+    function displaySourceCode(sourceCode) {
+      const sourceCodeElement = document.getElementById('sourceCodeContent');
+      // Encode the HTML to be displayed safely in a pre tag
+      const encodedSource = escapeHtml(sourceCode);
+      sourceCodeElement.innerHTML = `<pre><code class="language-html">${encodedSource}</code></pre>`;
+
+      // If Prism is loaded, highlight the newly added code
+      if (window.Prism && typeof Prism.highlightElement === 'function') {
+        const codeElement = sourceCodeElement.querySelector('code');
+        if (codeElement) {
+          Prism.highlightElement(codeElement);
+        }
+      } else {
+        // If Prism hasn't loaded yet, wait for it to load and then highlight
+        // We'll add a mechanism to highlight once Prism is available
+        ensurePrismHighlight(sourceCodeElement.querySelector('code'));
+      }
+    }
+
+    // Function to ensure code gets highlighted once Prism is loaded
+    function ensurePrismHighlight(codeElement) {
+      if (!codeElement) return;
+
+      // Check if Prism is available
+      if (window.Prism && typeof Prism.highlightElement === 'function') {
+        Prism.highlightElement(codeElement);
+      } else {
+        // Wait a bit and try again
+        setTimeout(() => ensurePrismHighlight(codeElement), 100);
       }
     }
 
@@ -222,7 +309,33 @@
 
     // Initialize by validating the user's HTML on page load
     window.addEventListener('DOMContentLoaded', (event) => {
+      // Set up view source button event listener
+      document.getElementById('viewSourceBtn').addEventListener('click', function() {
+        const container = document.getElementById('sourceCodeContainer');
+        if (container.style.display === 'none' || container.style.display === '') {
+          container.style.display = 'block';
+          this.textContent = '-hide Source';
+        } else {
+          container.style.display = 'none';
+          this.textContent = '👀 View Source';
+        }
+      });
+
       validateUserHTML();
+    });
+
+    // Load Prism.js after the DOM has loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      // Dynamically load the Prism.js script
+      const script = document.createElement('script');
+      script.src = '/assets/prismjs/prism.js';
+      script.onload = function() {
+        // Optional: Re-highlight code if it's already in the DOM
+        if (window.Prism) {
+          Prism.highlightAll();
+        }
+      };
+      document.head.appendChild(script);
     });
   </script>
 </body>

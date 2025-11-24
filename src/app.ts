@@ -158,6 +158,34 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       "/social-card.png": async () => {
         return serveSocialCard();
       },
+
+      // Static assets from node_modules
+      "/assets/*": async (req) => {
+        const url = new URL(req.url);
+        const assetPath = url.pathname.substring(8); // Remove '/assets/'
+
+        // Only allow prismjs assets for security
+        if (!assetPath.startsWith('prismjs/')) {
+          return new Response("Not found", { status: 404 });
+        }
+
+        const filePath = `./node_modules/${assetPath}`;
+        const file = Bun.file(filePath);
+
+        if (!await file.exists()) {
+          return new Response("Not found", { status: 404 });
+        }
+
+        // Set content type based on file extension
+        let contentType = "application/octet-stream";
+        if (filePath.endsWith(".css")) {
+          contentType = "text/css";
+        } else if (filePath.endsWith(".js")) {
+          contentType = "application/javascript";
+        }
+
+        return new Response(file, { headers: { "Content-Type": contentType } });
+      },
     },
 
     async fetch(req) {

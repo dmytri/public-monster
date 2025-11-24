@@ -169,31 +169,28 @@ export async function getFileContentHandler(
 ): Promise<Response> {
   const { username } = user;
 
-  // Extract path from the URL - with the route "/api/files/content/*", we need to find the file path
+  // Extract the file path from URL parameters - the route is now "/api/files/content/*"
   const url = new URL(req.url);
   const pathname = url.pathname;
 
-  // The path format would be /api/files/content/{username}/{file_path}
-  const pathParts = pathname.split('/').filter(part => part);
-
-  // We expect at least ['api', 'files', 'content', 'username', 'file_path...']
-  if (pathParts.length < 4 || pathParts[0] !== 'api' || pathParts[1] !== 'files' || pathParts[2] !== 'content') {
+  // Extract the file path part after "/api/files/content/"
+  const basePath = "/api/files/content/";
+  if (!pathname.startsWith(basePath)) {
     return new Response("Invalid request path", { status: 400 });
   }
 
-  // The username in the URL should match the authenticated user
-  const requestedUsername = pathParts[3];
-  if (requestedUsername !== username) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  // Reconstruct the file path from remaining parts
-  const filePathParts = pathParts.slice(4); // Everything after 'content' and 'username'
-  if (filePathParts.length === 0) {
+  // Get the actual file path by removing the base path
+  const filePath = pathname.substring(basePath.length);
+  if (!filePath) {
     return new Response("File path not specified", { status: 400 });
   }
 
-  const filePath = filePathParts.join('/');
+  // Validate the file path to prevent directory traversal
+  if (filePath.includes('../') || filePath.startsWith('../') || filePath.includes('/..') || filePath === '..') {
+    return new Response("Invalid file path", { status: 400 });
+  }
+
+  // Use the authenticated user's username to construct the storage path
   const normalizedPath = await storagePath(username, filePath);
 
   try {
