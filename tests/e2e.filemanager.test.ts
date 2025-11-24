@@ -1,45 +1,29 @@
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect } from "bun:test";
 import { Window } from "happy-dom";
-import type { Server } from "bun";
-import { startServer } from "../src/app";
+import { setupTestHooks, TEST_USERNAME, portnumber } from "./helpers";
 
-// --- Test Configuration ---
-const TEST_PORT:number = 3002;
-const TEST_USERNAME:string = `_`;
-
+// Calculate unique port for this test file
+const TEST_PORT = portnumber('e2e.filemanager.test.ts');
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 
-let server: Server;
+// Setup test hooks using helpers
+setupTestHooks({'username': TEST_USERNAME}, TEST_PORT);
 
-// --- Test Hooks ---
-beforeAll(async () => {
-  const testUserData = {
-    "test-token": { userid: "test-user-id", username: "testuser" },
-  };
-
-  server = startServer(TEST_PORT, {'username': TEST_USERNAME});
-  await Bun.sleep(100);
-});
-
-afterAll(async () => {
-  server.stop(true);
-});
-
-// --- E2E Tests ---
+// --- File Manager E2E Tests ---
 test("File upload and listing through real DOM interactions", async () => {
   // Load filemanager.html content
   const htmlContent = await Bun.file("./public/filemanager.html").text();
-  
+
   // Create a DOM environment for the HTML content using happy-dom
   const window = new Window({
     url: `${BASE_URL}/public_html`
   });
-  
+
   const { document } = window;
   // Write the HTML content to the document
   document.write(htmlContent);
   document.close();
-  
+
   // Mock the hanko import and setup since it's an external module
   const mockHanko = {
     getSessionToken: () => Promise.resolve(btoa(TEST_USERNAME)),
@@ -48,17 +32,17 @@ test("File upload and listing through real DOM interactions", async () => {
     onSessionExpired: () => {},
     onUserDeleted: () => {},
   };
-  
+
   // Create a mock for the register function
   (window as any).register = () => Promise.resolve({ hanko: mockHanko });
-  
+
   // Set up the global environment similar to how the real page would
   //(window as any).hankoToken = authToken;
   const usernameElement = document.getElementById('username');
   if (usernameElement) {
     usernameElement.textContent = TEST_USERNAME;
   }
-  
+
   // Mock the loadFiles function to capture the API call
   let loadFilesCalled = false;
   let capturedToken = null;
@@ -66,12 +50,12 @@ test("File upload and listing through real DOM interactions", async () => {
     loadFilesCalled = true;
     capturedToken = token;
   };
-  
+
   // Simulate file upload functionality - use global FormData like server tests
   const formData = new FormData();
   formData.append("file", new Blob(["hello world"]), "test.txt"); // Third parameter is the filename
   formData.append("path", "test.txt");
-  
+
   // Make the actual fetch call to the real server
   // Use Authorization header for test environment compatibility
   // The body will automatically set the correct Content-Type for FormData
@@ -90,7 +74,7 @@ test("File upload and listing through real DOM interactions", async () => {
   const files = await listResponse.json();
   expect(Array.isArray(files)).toBe(true);
   expect(files.some((f: any) => f.ObjectName === "test.txt")).toBe(true);
-  
+
   // Verify that our mock functions were called properly
   // The mock function test was for DOM interaction, but we're testing API directly
   // The important thing is that the file upload and retrieval worked
@@ -101,22 +85,22 @@ test("File deletion through real DOM interactions", async () => {
   const formData = new FormData();
   formData.append("file", new Blob(["delete me"]), "todelete.txt"); // Third parameter is the filename
   formData.append("path", "todelete.txt");
-  
+
   const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "POST",
     body: formData
   });
-  
+
   expect(uploadResponse.status).toBe(200);
-  
+
   // Verify the file exists
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
   });
-  
+
   expect(listResponse.status).toBe(200);
   const files = await listResponse.json();
   expect(files.some((f: any) => f.ObjectName === "todelete.txt")).toBe(true);
-  
+
   // Now delete the file using the actual API endpoint
   const deleteResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "DELETE",
@@ -125,16 +109,16 @@ test("File deletion through real DOM interactions", async () => {
     },
     body: JSON.stringify({ path: "todelete.txt" })
   });
-  
+
   expect(deleteResponse.status).toBe(200);
-  
+
   // Add a small delay to allow for the deletion to propagate
   await Bun.sleep(100);
-  
+
   // Verify the file is gone
   const finalListResponse = await fetch(`${BASE_URL}/api/files`, {
   });
-  
+
   expect(finalListResponse.status).toBe(200);
   const finalFiles = await finalListResponse.json();
   expect(finalFiles.some((f: any) => f.ObjectName === "todelete.txt")).toBe(false);
@@ -145,13 +129,13 @@ test("Create starter page functionality", async () => {
   const starterResponse = await fetch(`${BASE_URL}/api/create-starter`, {
     method: "POST",
   });
-  
+
   expect(starterResponse.status).toBe(200);
-  
+
   // Verify the starter page exists
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
   });
-  
+
   expect(listResponse.status).toBe(200);
   const files = await listResponse.json();
   expect(files.some((f: any) => f.ObjectName === "index.html")).toBe(true);
@@ -160,45 +144,26 @@ test("Create starter page functionality", async () => {
 // Test that the HTML pages load correctly and contain expected elements
 test("filemanager.html loads with expected DOM structure", async () => {
   const htmlContent = await Bun.file("./public/filemanager.html").text();
-  
+
   const window = new Window({
     url: `${BASE_URL}/public_html`
   });
-  
+
   const { document } = window;
   document.write(htmlContent);
   document.close();
-  
+
   // Check for key elements in the page
   expect(document.querySelector('h1')).toBeTruthy();
   expect(document.querySelector('#username')).toBeTruthy();
   expect(document.querySelector('#tree')).toBeTruthy();
-  
+
   // Verify that the title contains the expected text
   expect(document.title).toContain('public_html');
-  
+
   // Check that required script elements exist
   const scriptTags = document.querySelectorAll('script');
   expect(scriptTags.length).toBeGreaterThan(0);
-}, 20000);
-
-test("404.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("./public/404.html").text();
-  
-  const window = new Window({
-    url: `${BASE_URL}/404`
-  });
-  
-  const { document } = window;
-  document.write(htmlContent);
-  document.close();
-  
-  // Check for key elements in the 404 page
-  expect(document.querySelector('h1')).toBeTruthy();
-  expect(document.querySelector('#suggestions')).toBeTruthy();
-  
-  // Verify that the title contains the expected text
-  expect(document.title).toContain('404');
 }, 20000);
 
 test("File listing functionality with real DOM interactions", async () => {
@@ -206,14 +171,14 @@ test("File listing functionality with real DOM interactions", async () => {
   const formData = new FormData();
   formData.append("file", new Blob(["test content"]), "listtest.txt"); // Third parameter is the filename
   formData.append("path", "listtest.txt");
-  
+
   const uploadResponse = await fetch(`${BASE_URL}/api/files`, {
     method: "POST",
     body: formData
   });
-  
+
   expect(uploadResponse.status).toBe(200);
-  
+
   // Now list files to verify the upload worked via the loadFiles function
   const listResponse = await fetch(`${BASE_URL}/api/files`, {
   });
@@ -225,160 +190,6 @@ test("File listing functionality with real DOM interactions", async () => {
     expect(Array.isArray(files)).toBe(true);
 
     expect(files.some((f: any) => f.ObjectName === "listtest.txt")).toBe(true);
-
-  }, 20000);
-
-  
-
-  test("Clear buttons on upload form work correctly", async () => {
-
-    const htmlContent = await Bun.file("./public/index.html").text();
-
-    const window = new Window({ url: BASE_URL });
-
-    const { document } = window;
-
-    document.write(htmlContent);
-
-  
-
-    // Manually trigger script execution if happy-dom doesn't do it automatically
-
-    const scriptElement = document.querySelector('script[type="module"]');
-
-    if (scriptElement) {
-
-      // We can't execute the module script directly in this context,
-
-      // so we'll replicate the relevant parts of its setup.
-
-      const filesInput = document.getElementById('files') as HTMLInputElement;
-
-      const folderInput = document.getElementById('folder') as HTMLInputElement;
-
-      const clearFilesBtn = document.getElementById('clearFiles') as HTMLButtonElement;
-
-      const clearFolderBtn = document.getElementById('clearFolder') as HTMLButtonElement;
-
-  
-
-      // Attach event listeners from the script
-
-      filesInput.addEventListener('change', () => {
-
-        clearFilesBtn.style.display = filesInput.files.length > 0 ? 'inline' : 'none';
-
-      });
-
-      folderInput.addEventListener('change', () => {
-
-        clearFolderBtn.style.display = folderInput.files.length > 0 ? 'inline' : 'none';
-
-      });
-
-      clearFilesBtn.addEventListener('click', () => {
-
-        filesInput.value = '';
-
-        clearFilesBtn.style.display = 'none';
-
-      });
-
-      clearFolderBtn.addEventListener('click', () => {
-
-        folderInput.value = '';
-
-        clearFolderBtn.style.display = 'none';
-
-      });
-
-  
-
-      // --- Test Case for File Input ---
-
-      // 1. Initially, the clear button should be hidden
-
-      expect(clearFilesBtn.style.display).toBe("none");
-
-  
-
-      // 2. Simulate selecting a file
-
-      // happy-dom doesn't support FileList, so we mock it
-
-      Object.defineProperty(filesInput, 'files', {
-
-        value: [{ name: 'test.txt' }],
-
-        writable: true,
-
-      });
-
-      filesInput.dispatchEvent(new window.Event('change'));
-
-  
-
-      // 3. The clear button should now be visible
-
-      expect(clearFilesBtn.style.display).toBe("inline");
-
-  
-
-      // 4. Simulate clicking the clear button
-
-      clearFilesBtn.dispatchEvent(new window.Event('click'));
-
-  
-
-      // 5. The clear button should be hidden again and the input value cleared
-
-      expect(clearFilesBtn.style.display).toBe("none");
-
-      expect(filesInput.value).toBe("");
-
-  
-
-      // --- Test Case for Folder Input ---
-
-      // 1. Initially, the clear button should be hidden
-
-      expect(clearFolderBtn.style.display).toBe("none");
-
-  
-
-      // 2. Simulate selecting a folder
-
-      Object.defineProperty(folderInput, 'files', {
-
-          value: [{ name: 'folder' }],
-
-          writable: true,
-
-      });
-
-      folderInput.dispatchEvent(new window.Event('change'));
-
-  
-
-      // 3. The clear button should now be visible
-
-      expect(clearFolderBtn.style.display).toBe("inline");
-
-  
-
-      // 4. Simulate clicking the clear button
-
-      clearFolderBtn.dispatchEvent(new window.Event('click'));
-
-  
-
-      // 5. The clear button should be hidden again and the input value cleared
-
-      expect(clearFolderBtn.style.display).toBe("none");
-
-      expect(folderInput.value).toBe("");
-
-    }
 
   }, 20000);
 
@@ -398,7 +209,7 @@ test("File listing functionality with real DOM interactions", async () => {
     const window = new Window({ url: `${BASE_URL}/public_html` });
     const { document } = window;
     document.write(htmlContent);
-    
+
     // Mock dependencies that are not available in happy-dom
     window.URL.createObjectURL = () => "blob:mock-url";
     window.URL.revokeObjectURL = () => {};

@@ -43,6 +43,8 @@
 ## Startup
 When you say **"hi"**, I will:
 1. **Summarize rules** in my own words
-2. **Explain project** examine repo and explain purpose
+2. **Summerize README.md**
+3. **Explain project** examine repo explain purpose and vibe of this project
+
 
 Failure to do both means I didn't read the rules.
