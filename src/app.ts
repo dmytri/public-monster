@@ -70,8 +70,8 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         }, HANKO_API_URL)
       },
 
-      // API: Validate HTML
-      "/api/validate-html": {
+      // API: Generic Validation
+      "/api/validate": {
         GET: requireAuth(async (req, user) => {
           return validateHtmlHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
         }, HANKO_API_URL)
@@ -147,8 +147,8 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         return serveStaticPage('/content-moderation', HANKO_API_URL);
       },
 
-      "/validate-html": async () => {
-        return serveStaticPage('/validate-html', HANKO_API_URL);
+      "/validate": async () => {
+        return serveStaticPage('/validate', HANKO_API_URL);
       },
 
       "/404": async () => {

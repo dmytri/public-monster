@@ -457,7 +457,7 @@ async function deleteFile(path, token) {
 
 async function validateHtmlFile(path, token) {
   // Navigate to the validation page, passing the file path as a query parameter
-  window.open(`/validate-html?file=${encodeURIComponent(path)}`, '_blank');
+  window.open(`/validate?file=${encodeURIComponent(path)}`, '_blank');
 }
 </script>
 <style>

@@ -186,7 +186,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const filePath = urlParams.get('file');
 
-        let apiUrl = '/api/validate-html';
+        let apiUrl = '/api/validate';
         if (filePath) {
           apiUrl += `?file=${encodeURIComponent(filePath)}`;
         }
