@@ -285,7 +285,9 @@
 
         // Display errors first
         errors.forEach(issue => {
-          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${issue.message} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+          // Clean up the confusing bracket representations in the error message
+          const cleanMessage = issue.message.replace(/\[ \]/g, '');
+          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${cleanMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -294,7 +296,9 @@
 
         // Then warnings
         warnings.forEach(issue => {
-          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${issue.message} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+          // Clean up the confusing bracket representations in the warning message
+          const cleanMessage = issue.message.replace(/\[ \]/g, '');
+          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${cleanMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
