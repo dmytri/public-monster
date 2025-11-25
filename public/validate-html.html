@@ -285,8 +285,15 @@
 
         // Display errors first
         errors.forEach(issue => {
-          // Clean up the confusing bracket representations in the error message
-          const cleanMessage = issue.message.replace(/\[ \]/g, '');
+          // Clean up the confusing bracket representations in the error message and provide more helpful text
+          let cleanMessage = issue.message.replace(/\[ \]/g, '');
+
+          // Make some common HTMLHint messages more user-friendly
+          if (cleanMessage.includes('Tag must be paired')) {
+            cleanMessage = cleanMessage.replace('Tag must be paired, no start tag:', 'Found closing tag with no matching opening tag:')
+              .replace('Tag must be paired, missing:', 'Found opening tag with no matching closing tag:');
+          }
+
           resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${cleanMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
@@ -296,8 +303,15 @@
 
         // Then warnings
         warnings.forEach(issue => {
-          // Clean up the confusing bracket representations in the warning message
-          const cleanMessage = issue.message.replace(/\[ \]/g, '');
+          // Clean up the confusing bracket representations in the warning message and provide more helpful text
+          let cleanMessage = issue.message.replace(/\[ \]/g, '');
+
+          // Make some common HTMLHint messages more user-friendly
+          if (cleanMessage.includes('Tag must be paired')) {
+            cleanMessage = cleanMessage.replace('Tag must be paired, no start tag:', 'Found closing tag with no matching opening tag:')
+              .replace('Tag must be paired, missing:', 'Found opening tag with no matching closing tag:');
+          }
+
           resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${cleanMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
