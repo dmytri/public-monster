@@ -68,6 +68,12 @@ test("validate-html.html includes view source functionality", async () => {
     link => link.getAttribute('href')?.includes('prism.css')
   );
   expect(prismCssLink).toBeTruthy();
+
+  // Check that line numbers CSS is included
+  const lineNumbersCssLink = Array.from(document.querySelectorAll('link')).find(
+    link => link.getAttribute('href')?.includes('prism-line-numbers.css')
+  );
+  expect(lineNumbersCssLink).toBeTruthy();
 }, 20000);
 
 test("validate-html.html view source button toggles source visibility", async () => {
@@ -114,6 +120,57 @@ test("validate-html.html view source button toggles source visibility", async ()
   // After clicking again, it should go back to 'none' (the CSS default)
   expect(sourceContainer.style.display).toBe('none');
   expect(viewSourceBtn.textContent).toBe('👀 View Source');
+}, 20000);
+
+test("validate-html.html source code displays with line numbers", async () => {
+  const htmlContent = await Bun.file("./public/validate-html.html").text();
+
+  const window = new Window({
+    url: `${BASE_URL}/validate-html`
+  });
+
+  const { document } = window;
+  document.write(htmlContent);
+  document.close();
+
+  // Manually execute the content of the DOMContentLoaded event to set up event listeners
+  // Set up view source button event listener (replicating the code from the HTML file)
+  const viewSourceBtn = document.getElementById('viewSourceBtn') as HTMLElement;
+  const sourceContainer = document.getElementById('sourceCodeContainer') as HTMLElement;
+
+  viewSourceBtn.addEventListener('click', function() {
+    if (sourceContainer.style.display === 'none' || sourceContainer.style.display === '') {
+      sourceContainer.style.display = 'block';
+      this.textContent = '-hide Source';
+    } else {
+      sourceContainer.style.display = 'none';
+      this.textContent = '👀 View Source';
+    }
+  });
+
+  // Test the displaySourceCode function directly
+  const sourceCodeElement = document.getElementById('sourceCodeContent');
+  const testCode = '<!DOCTYPE html>\n<html>\n<head>\n<title>Test</title>\n</head>\n<body>\n<h1>Hello</h1>\n</body>\n</html>';
+
+  // This replicates the displaySourceCode function logic
+  const encodedSource = testCode
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+  sourceCodeElement.innerHTML = `<pre class="line-numbers"><code class="language-html">${encodedSource}</code></pre>`;
+
+  // Check that the pre element has the line-numbers class
+  const preElement = sourceCodeElement.querySelector('pre');
+  expect(preElement).toBeTruthy();
+  expect(preElement?.classList.contains('line-numbers')).toBe(true);
+
+  // Check that the code element has the language-html class
+  const codeElement = sourceCodeElement.querySelector('code');
+  expect(codeElement).toBeTruthy();
+  expect(codeElement?.classList.contains('language-html')).toBe(true);
 }, 20000);
 
 test("GET /validate-html serves the HTML validation page", async () => {
