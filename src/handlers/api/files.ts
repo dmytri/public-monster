@@ -35,13 +35,17 @@ export function validateHtml(html: string): { valid: boolean; issues: Array<{ ty
   const messages = HTMLHintActual.verify(html, ruleset);
 
   // Convert htmlhint messages to our format
+  const lines = html.split('\n');
   const issues = messages.map(msg => {
+    // Extract the actual line content where the issue occurred
+    const actualLine = msg.line && msg.line <= lines.length ? lines[msg.line - 1] : '';
+
     return {
       type: msg.type.toLowerCase(), // error, warning
       message: msg.message,
       line: msg.line || 0,
       column: msg.col || 0,
-      codeSnippet: msg.raw || ''
+      codeSnippet: actualLine.trim() || (msg.raw || '')
     };
   });
 
