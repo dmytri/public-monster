@@ -10,6 +10,11 @@
   <link href="/assets/prismjs/plugins/line-numbers/prism-line-numbers.css" rel="stylesheet" />
   <title>HTML Validator - public.monster</title>
 
+  <!-- Load HTMLHint, Prism.js and the line numbers plugin -->
+  <script src="/assets/htmlhint/dist/htmlhint.min.js"></script>
+  <script src="/assets/prismjs/prism.js"></script>
+  <script src="/assets/prismjs/plugins/line-numbers/prism-line-numbers.min.js"></script>
+
   <style>
     body {
       background: #008080;
@@ -165,17 +170,13 @@
   </main>
 
   <script>
-    // Function to validate HTML automatically when page loads
     async function validateUserHTML() {
       try {
-        // Get the session token
         let token = null;
         try {
-          // Attempt to get token via Hanko
           if (window.hanko) {
             token = await window.hanko.getSessionToken();
           } else {
-            // Fallback: check if token is available in global scope
             token = window.hankoToken;
           }
         } catch (e) {
@@ -191,35 +192,27 @@
           apiUrl += `?file=${encodeURIComponent(filePath)}`;
         }
 
-        // Fetch and validate the user's HTML content
-        const validateRes = await fetch(apiUrl, {
+        // First, fetch the HTML content to validate
+        const contentRes = await fetch(`/api/files/content/${filePath || 'index.html'}`, {
           headers: token ? { 'Authorization': 'Bearer ' + token } : {}
         });
 
-        if (validateRes.ok) {
-          const results = await validateRes.json();
+        if (contentRes.ok) {
+          const sourceCode = await contentRes.text();
 
-          // Also fetch the HTML source code to display
-          const sourceRes = await fetch(`/api/files/content/${filePath || 'index.html'}`, {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
-          });
+          // Display the source code
+          displaySourceCode(sourceCode);
 
-          if (sourceRes.ok) {
-            const sourceCode = await sourceRes.text();
-            displaySourceCode(sourceCode);
-          } else {
-            // Even if source code retrieval fails, still show validation results
-            console.error('Failed to fetch source code:', sourceRes.status, await sourceRes.text());
-          }
-
+          // Run validation client-side immediately
+          const results = validateHtml(sourceCode);
           displayValidationResults(results);
-        } else if (validateRes.status === 404) {
+        } else if (contentRes.status === 404) {
           document.getElementById('validationResults').innerHTML =
             '<div class="error">No index.html file found to validate. Please upload an index.html file first.</div>' +
             '<p><a href="/">← Go to Dashboard to upload files</a></p>';
         } else {
           document.getElementById('validationResults').innerHTML =
-            `<div class="error">Could not validate your HTML: ${validateRes.status} ${validateRes.statusText}</div>`;
+            `<div class="error">Could not fetch your HTML for validation: ${contentRes.status} ${contentRes.statusText}</div>`;
         }
       } catch (error) {
         console.error('Error validating HTML:', error);
@@ -275,8 +268,7 @@
     function displayValidationResults(results) {
       if (results.valid) {
         document.getElementById('validationResults').innerHTML =
-          '<div class="success">✅ Your HTML looks good! No major issues found.</div>' +
-          '<div class="success">✨ Your page is beginner-friendly! ✨</div>';
+          '<div class="success">✅ Your HTML looks good! No major issues found.</div>';
       } else {
         let resultHTML = '<h3>Issues Found:</h3><ul>';
 
@@ -289,16 +281,7 @@
           // Properly escape the entire message to prevent browser from interpreting HTML tags
           // that might be between brackets in HTMLHint's output
           const escapedMessage = escapeHtml(issue.message);
-          // Clean up the confusing bracket representations in the error message and provide more helpful text
-          let cleanMessage = escapedMessage.replace(/\[ \]/g, '[tag]');
-
-          // Make some common HTMLHint messages more user-friendly
-          if (cleanMessage.includes('Tag must be paired')) {
-            cleanMessage = cleanMessage.replace('Tag must be paired, no start tag:', 'Found closing tag with no matching opening tag:')
-              .replace('Tag must be paired, missing:', 'Found opening tag with no matching closing tag:');
-          }
-
-          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${cleanMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${escapedMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -307,19 +290,8 @@
 
         // Then warnings
         warnings.forEach(issue => {
-          // Properly escape the entire message to prevent browser from interpreting HTML tags
-          // that might be between brackets in HTMLHint's output
           const escapedMessage = escapeHtml(issue.message);
-          // Clean up the confusing bracket representations in the warning message and provide more helpful text
-          let cleanMessage = escapedMessage.replace(/\[ \]/g, '[tag]');
-
-          // Make some common HTMLHint messages more user-friendly
-          if (cleanMessage.includes('Tag must be paired')) {
-            cleanMessage = cleanMessage.replace('Tag must be paired, no start tag:', 'Found closing tag with no matching opening tag:')
-              .replace('Tag must be paired, missing:', 'Found opening tag with no matching closing tag:');
-          }
-
-          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${cleanMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${escapedMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -479,6 +451,54 @@
         : html;
     }
 
+    // Client-side HTML validation function using htmlhint
+    function validateHtml(html) {
+      // HTMLHint configuration matching the server-side rules
+      const ruleset = {
+        "tagname-lowercase": true,
+        "attr-lowercase": true,
+        "attr-value-double-quotes": true,
+        "html-lang-require": true,
+        "doctype-first": true,
+        "head-script-disabled": false, // Updated to allow head scripts for analytics
+        "style-disabled": false,
+        "inline-style-disabled": false,
+        "id-class-value": "dash",
+        "alt-require": true,
+        "attr-no-duplication": true,
+        "title-require": true,
+        "tag-pair": true,
+        "spec-char-escape": true,
+        "id-unique": true,
+        "src-require": true,
+        "attr-unsafe-chars": true,
+        "attr-whitespace": true
+      };
+
+      // Run htmlhint on the HTML content
+      const messages = HTMLHint.HTMLHint.verify(html, ruleset);
+
+      // Convert htmlhint messages to our format
+      const lines = html.split('\n');
+      const issues = messages.map(msg => {
+        // Extract the actual line content where the issue occurred
+        const actualLine = msg.line && msg.line <= lines.length ? lines[msg.line - 1] : '';
+
+        return {
+          type: msg.type.toLowerCase(), // error, warning
+          message: msg.message,
+          line: msg.line || 0,
+          column: msg.col || 0,
+          codeSnippet: actualLine.trim() || (msg.raw || '')
+        };
+      });
+
+      return {
+        valid: issues.length === 0,
+        issues: issues
+      };
+    }
+
     // Initialize by validating the user's HTML on page load
     window.addEventListener('DOMContentLoaded', (event) => {
       // Set up view source button event listener
@@ -494,28 +514,6 @@
       });
 
       validateUserHTML();
-    });
-
-    // Load Prism.js and the line numbers plugin after the DOM has loaded
-    document.addEventListener('DOMContentLoaded', function() {
-      // First, load the main Prism.js script
-      const script = document.createElement('script');
-      script.src = '/assets/prismjs/prism.js';
-      document.head.appendChild(script);
-
-      // Wait for the main Prism script to load, then load the plugin
-      script.onload = function() {
-        // Load the line numbers plugin after Prism is loaded
-        const lineNumbersScript = document.createElement('script');
-        lineNumbersScript.src = '/assets/prismjs/plugins/line-numbers/prism-line-numbers.min.js';
-        lineNumbersScript.onload = function() {
-          // Optional: Re-highlight code if it's already in the DOM
-          if (window.Prism) {
-            Prism.highlightAll();
-          }
-        };
-        document.head.appendChild(lineNumbersScript);
-      };
     });
   </script>
 </body>

@@ -165,7 +165,7 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         const assetPath = url.pathname.substring(8); // Remove '/assets/'
 
         // Only allow specific assets for security
-        if (!assetPath.startsWith('prismjs/') && !assetPath.startsWith('escape-html/')) {
+        if (!assetPath.startsWith('prismjs/') && !assetPath.startsWith('escape-html/') && !assetPath.startsWith('htmlhint/')) {
           return new Response("Not found", { status: 404 });
         }
 
