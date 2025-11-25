@@ -16,7 +16,7 @@ export function validateHtml(html: string): { valid: boolean; issues: Array<{ ty
     "attr-value-double-quotes": true,
     "html-lang-require": true,
     "doctype-first": true,
-    "head-script-disabled": true,
+    "head-script-disabled": false,
     "style-disabled": false,
     "inline-style-disabled": false,
     "id-class-value": "dash",

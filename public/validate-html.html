@@ -9,6 +9,7 @@
   <link href="/assets/prismjs/themes/prism.css" rel="stylesheet" />
   <link href="/assets/prismjs/plugins/line-numbers/prism-line-numbers.css" rel="stylesheet" />
   <title>HTML Validator - public.monster</title>
+
   <style>
     body {
       background: #008080;
@@ -285,8 +286,11 @@
 
         // Display errors first
         errors.forEach(issue => {
+          // Properly escape the entire message to prevent browser from interpreting HTML tags
+          // that might be between brackets in HTMLHint's output
+          const escapedMessage = escapeHtml(issue.message);
           // Clean up the confusing bracket representations in the error message and provide more helpful text
-          let cleanMessage = issue.message.replace(/\[ \]/g, '');
+          let cleanMessage = escapedMessage.replace(/\[ \]/g, '[tag]');
 
           // Make some common HTMLHint messages more user-friendly
           if (cleanMessage.includes('Tag must be paired')) {
@@ -303,8 +307,11 @@
 
         // Then warnings
         warnings.forEach(issue => {
+          // Properly escape the entire message to prevent browser from interpreting HTML tags
+          // that might be between brackets in HTMLHint's output
+          const escapedMessage = escapeHtml(issue.message);
           // Clean up the confusing bracket representations in the warning message and provide more helpful text
-          let cleanMessage = issue.message.replace(/\[ \]/g, '');
+          let cleanMessage = escapedMessage.replace(/\[ \]/g, '[tag]');
 
           // Make some common HTMLHint messages more user-friendly
           if (cleanMessage.includes('Tag must be paired')) {
@@ -424,14 +431,52 @@
       });
     }
 
-    // Helper function to escape HTML for display
-    function escapeHtml(unsafe) {
-      return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    // Official escape-html function based on the npm module
+    function escapeHtml(string) {
+      var str = '' + string;
+      var match = /["'&<>]/.exec(str);
+
+      if (!match) {
+        return str;
+      }
+
+      var escape;
+      var html = '';
+      var index = 0;
+      var lastIndex = 0;
+
+      for (index = match.index; index < str.length; index++) {
+        switch (str.charCodeAt(index)) {
+          case 34: // "
+            escape = '&quot;';
+            break;
+          case 38: // &
+            escape = '&amp;';
+            break;
+          case 39: // '
+            escape = '&#39;';
+            break;
+          case 60: // <
+            escape = '&lt;';
+            break;
+          case 62: // >
+            escape = '&gt;';
+            break;
+          default:
+            continue;
+        }
+
+        if (lastIndex !== index) {
+          html += str.substring(lastIndex, index);
+        }
+
+        lastIndex = index + 1;
+        html += escape;
+      }
+
+      return lastIndex !== index
+        ? html + str.substring(lastIndex, index)
+        : html;
     }
 
     // Initialize by validating the user's HTML on page load
