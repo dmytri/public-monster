@@ -52,27 +52,30 @@
     }
 
     .error {
-      color: #f00;
-      background: #ffb6c1;
-      padding: 5px;
+      color: #fff;
+      background: #d32f2f;
+      padding: 10px;
       margin: 5px 0;
-      border: 1px solid #f00;
+      border: 1px solid #b71c1c;
+      border-radius: 4px;
     }
 
     .warning {
       color: #000;
-      background: #ffffe0;
-      padding: 5px;
+      background: #ffecb3;
+      padding: 10px;
       margin: 5px 0;
-      border: 1px solid #ffa500;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
     }
 
     .success {
-      color: #008000;
-      background: #98FB98;
-      padding: 5px;
+      color: #fff;
+      background: #388e3c;
+      padding: 10px;
       margin: 5px 0;
-      border: 1px solid #008000;
+      border: 1px solid #2e7d32;
+      border-radius: 4px;
     }
 
     a {
@@ -117,6 +120,23 @@
       padding: 1em;
       overflow: auto;
       background: #f4f4f4;
+    }
+
+    .line-highlight {
+      background-color: #ffeb3b7a;
+      display: block;
+      padding: 2px 0;
+      border-radius: 2px;
+    }
+
+    .line-link {
+      color: #1976d2;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .line-link:hover {
+      color: #0d47a1;
     }
   </style>
 </head>
@@ -265,7 +285,7 @@
 
         // Display errors first
         errors.forEach(issue => {
-          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${issue.message} at line ${issue.line}, col ${issue.column}<br>`;
+          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${issue.message} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -274,7 +294,7 @@
 
         // Then warnings
         warnings.forEach(issue => {
-          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${issue.message} at line ${issue.line}, col ${issue.column}<br>`;
+          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${issue.message} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -302,7 +322,88 @@
         }
 
         document.getElementById('validationResults').innerHTML = resultHTML;
+
+        // Set up event listeners for line links in validation results
+        setupLineLinkListeners();
       }
+    }
+
+    // Function to highlight a specific line in the source code view
+    function highlightLine(lineNumber) {
+      const sourceCodeElement = document.getElementById('sourceCodeContent');
+      if (!sourceCodeElement) return;
+
+      // Make sure the source code section is visible
+      const container = document.getElementById('sourceCodeContainer');
+      if (container.style.display === 'none' || container.style.display === '') {
+        container.style.display = 'block';
+        const viewSourceBtn = document.getElementById('viewSourceBtn');
+        if (viewSourceBtn) {
+          viewSourceBtn.textContent = '-hide Source';
+        }
+      }
+
+      // Find the line number element
+      // Prism's line-numbers plugin adds line numbers as a pseudo-element,
+      // so we need to scroll to the appropriate line
+      const preElement = sourceCodeElement.querySelector('pre');
+      if (!preElement) return;
+
+      // Split the content by newlines to identify the target line
+      const codeElement = preElement.querySelector('code');
+      if (!codeElement) return;
+
+      // Get all the text content and split by lines
+      const lines = codeElement.textContent.split('\n');
+      if (lineNumber > 0 && lineNumber <= lines.length) {
+        // Get all the line number elements created by the line-numbers plugin
+        // Since Prism creates these dynamically, we'll add a temporary highlight
+        const lineIndex = lineNumber - 1; // Convert to 0-based index
+
+        // Create an array of all lines with line numbers
+        const allLines = lines.map((line, index) => {
+          if (index === lineIndex) {
+            // Highlight this line
+            return `<span class="line-highlight">${line}</span>`;
+          }
+          return line;
+        });
+
+        // Temporarily update the content to show the highlight
+        const originalHTML = codeElement.innerHTML;
+        codeElement.innerHTML = allLines.join('\n');
+
+        // Scroll to the highlighted line
+        const highlightedLine = codeElement.querySelector('.line-highlight');
+        if (highlightedLine) {
+          highlightedLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Remove highlight after a few seconds
+          setTimeout(() => {
+            codeElement.innerHTML = originalHTML;
+          }, 3000);
+        }
+      }
+    }
+
+    // Set up event listeners for line links in validation results
+    function setupLineLinkListeners() {
+      // Use event delegation to handle clicks on line links
+      const validationResults = document.getElementById('validationResults');
+      if (!validationResults) return;
+
+      // Remove any existing listeners to avoid duplicates
+      validationResults.replaceWith(validationResults.cloneNode(true));
+      const newValidationResults = document.getElementById('validationResults');
+
+      newValidationResults.addEventListener('click', function(e) {
+        if (e.target.classList.contains('line-link')) {
+          e.preventDefault();
+          const lineNumber = parseInt(e.target.getAttribute('data-line'));
+          if (!isNaN(lineNumber)) {
+            highlightLine(lineNumber);
+          }
+        }
+      });
     }
 
     // Helper function to escape HTML for display
