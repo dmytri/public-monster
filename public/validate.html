@@ -296,7 +296,9 @@
           // Properly escape the entire message to prevent browser from interpreting HTML tags
           // that might be between brackets in HTMLHint's output
           const escapedMessage = escapeHtml(issue.message);
-          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${escapedMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+          // Add documentation link using the rule ID
+          const docLink = issue.rule ? ` <a href="https://htmlhint.com/rules/${issue.rule}/" target="_blank" rel="noopener noreferrer">(docs)</a>` : '';
+          resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${escapedMessage}${docLink} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -306,7 +308,9 @@
         // Then warnings
         warnings.forEach(issue => {
           const escapedMessage = escapeHtml(issue.message);
-          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${escapedMessage} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+          // Add documentation link using the rule ID
+          const docLink = issue.rule ? ` <a href="https://htmlhint.com/rules/${issue.rule}/" target="_blank" rel="noopener noreferrer">(docs)</a>` : '';
+          resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${escapedMessage}${docLink} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
           if (issue.codeSnippet) {
             resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
           }
@@ -502,6 +506,7 @@
         return {
           type: msg.type.toLowerCase(), // error, warning
           message: msg.message,
+          rule: msg.rule.id, // Capture the rule ID for documentation links
           line: msg.line || 0,
           column: msg.col || 0,
           codeSnippet: actualLine.trim() || (msg.raw || '')
