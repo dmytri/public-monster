@@ -8,9 +8,7 @@ import {
   uploadFileHandler,
   listFilesHandler,
   deleteFileHandler,
-  getFileContentHandler,
-  validateHtmlHandler,
-  getValidationReportHandler
+  getFileContentHandler
 } from './handlers/api/files';
 import { createStarterPageHandler } from './handlers/api/starter';
 import { prepareMigrationHandler, migrateUsernameHandler } from './handlers/api/migration';
@@ -70,19 +68,6 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         }, HANKO_API_URL)
       },
 
-      // API: Generic Validation
-      "/api/validate": {
-        GET: requireAuth(async (req, user) => {
-          return validateHtmlHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
-      },
-
-      // API: Get validation report
-      "/api/validation-report": {
-        GET: requireAuth(async (req, user) => {
-          return getValidationReportHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
-      },
 
       // API: Get user info
       "/api/whoami": {

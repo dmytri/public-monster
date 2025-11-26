@@ -183,17 +183,11 @@
           console.log("Hanko not initialized, trying fetch without auth");
         }
 
-        // Check if there's a specific file to validate in the URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const filePath = urlParams.get('file');
-
-        let apiUrl = '/api/validate';
-        if (filePath) {
-          apiUrl += `?file=${encodeURIComponent(filePath)}`;
-        }
+        // Check if there's a specific file to validate in the URL fragment
+        const filePath = window.location.hash ? decodeURIComponent(window.location.hash.substring(1)) : 'index.html';
 
         // First, fetch the HTML content to validate
-        const contentRes = await fetch(`/api/files/content/${filePath || 'index.html'}`, {
+        const contentRes = await fetch(`/api/files/content/${filePath}`, {
           headers: token ? { 'Authorization': 'Bearer ' + token } : {}
         });
 
