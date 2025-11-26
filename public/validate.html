@@ -169,7 +169,29 @@
     <p><a href="/">← Back to Dashboard</a></p>
   </main>
 
-  <script>
+  <script type="module">
+    import { register } from "https://esm.run/@teamhanko/hanko-elements";
+
+    const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
+
+    // Listen for session changes and reload page
+    hanko.onSessionCreated(() => {
+      window.location.reload();
+    });
+
+    hanko.onSessionExpired(() => {
+      window.location.href = '/';
+    });
+
+    hanko.onUserDeleted(() => {
+      window.location.href = '/';
+    });
+
+    const token = await hanko.getSessionToken();
+    if (!token) {
+      window.location.href = '/';
+    }
+
     async function validateUserHTML() {
       try {
         let token = null;
@@ -217,7 +239,6 @@
         document.getElementById('loading').style.display = 'none';
       }
     }
-
     // Display the HTML source code with syntax highlighting and line numbers
     function displaySourceCode(sourceCode) {
       const sourceCodeElement = document.getElementById('sourceCodeContent');
