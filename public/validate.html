@@ -157,7 +157,10 @@
     <button id="viewSourceBtn" class="view-source-btn">👀 View Source</button>
 
     <div id="sourceCodeContainer" class="source-code-container">
-      <h3>HTML Source Code:</h3>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3>HTML Source Code:</h3>
+        <button id="copySourceBtn" class="view-source-btn">📋 Copy Source</button>
+      </div>
       <div id="sourceCodeContent" class="result-section"></div>
     </div>
 
@@ -285,7 +288,7 @@
         document.getElementById('validationResults').innerHTML =
           '<div class="success">✅ Your HTML looks good! No major issues found.</div>';
       } else {
-        let resultHTML = '<h3>Issues Found:</h3><ul>';
+        let resultHTML = '<h3>Issues Found:</h3><button id="copyResultsBtn" class="view-source-btn" style="float: right; margin-top: -40px;">📋 Copy Results</button><ul>';
 
         // Group messages by severity
         const errors = results.issues.filter(issue => issue.type.toLowerCase() === 'error');
@@ -341,6 +344,14 @@
 
         // Set up event listeners for line links in validation results
         setupLineLinkListeners();
+
+        // Set up event listener for the copy results button
+        const copyButton = document.getElementById('copyResultsBtn');
+        if (copyButton) {
+          copyButton.addEventListener('click', function() {
+            copyValidationResultsToClipboard(results);
+          });
+        }
       }
     }
 
@@ -519,6 +530,79 @@
       };
     }
 
+    // Copy validation results to clipboard in plain text format
+    function copyValidationResultsToClipboard(results) {
+      if (results.valid) {
+        const plainText = "✅ Your HTML looks good! No major issues found.";
+        navigator.clipboard.writeText(plainText)
+          .then(() => {
+            alert('Validation results copied to clipboard!');
+          })
+          .catch(err => {
+            console.error('Failed to copy: ', err);
+            alert('Failed to copy to clipboard. Please try again.');
+          });
+        return;
+      }
+
+      // Group messages by severity
+      const errors = results.issues.filter(issue => issue.type.toLowerCase() === 'error');
+      const warnings = results.issues.filter(issue => issue.type.toLowerCase() !== 'error');
+
+      let plainText = `HTML Validation Results:\n\n`;
+
+      if (errors.length > 0) {
+        plainText += `Errors (${errors.length}):\n`;
+        errors.forEach((issue, index) => {
+          plainText += `${index + 1}. [${issue.type.toUpperCase()}] ${issue.message}\n`;
+          plainText += `   Line: ${issue.line}, Column: ${issue.column}\n`;
+          if (issue.rule) {
+            plainText += `   Documentation: https://htmlhint.com/rules/${issue.rule}/\n`;
+          }
+          if (issue.codeSnippet) {
+            plainText += `   Code: ${issue.codeSnippet}\n`;
+          }
+          plainText += `\n`;
+        });
+      }
+
+      if (warnings.length > 0) {
+        if (errors.length > 0) plainText += '\n'; // Add space between errors and warnings if both exist
+        plainText += `Warnings (${warnings.length}):\n`;
+        warnings.forEach((issue, index) => {
+          plainText += `${index + 1 + errors.length}. [${issue.type.toUpperCase()}] ${issue.message}\n`;
+          plainText += `   Line: ${issue.line}, Column: ${issue.column}\n`;
+          if (issue.rule) {
+            plainText += `   Documentation: https://htmlhint.com/rules/${issue.rule}/\n`;
+          }
+          if (issue.codeSnippet) {
+            plainText += `   Code: ${issue.codeSnippet}\n`;
+          }
+          plainText += `\n`;
+        });
+      }
+
+      // Add a summary at the end
+      const totalCount = results.issues.length;
+      plainText += `\nSummary: Found ${totalCount} issue${totalCount !== 1 ? 's' : ''} (${errors.length} error${errors.length !== 1 ? 's' : ''}, ${warnings.length} warning${warnings.length !== 1 ? 's' : ''})`;
+
+      navigator.clipboard.writeText(plainText)
+        .then(() => {
+          alert('Validation results copied to clipboard!');
+        })
+        .catch(err => {
+          console.error('Failed to copy: ', err);
+          // Fallback for browsers that don't support navigator.clipboard
+          const textArea = document.createElement('textarea');
+          textArea.value = plainText;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          alert('Validation results copied to clipboard!');
+        });
+    }
+
     // Initialize by validating the user's HTML on page load
     window.addEventListener('DOMContentLoaded', (event) => {
       // Set up view source button event listener
@@ -533,8 +617,48 @@
         }
       });
 
+      // Set up copy source button event listener
+      document.getElementById('copySourceBtn').addEventListener('click', function() {
+        copySourceCodeToClipboard();
+      });
+
       validateUserHTML();
     });
+
+    // Copy source code to clipboard
+    function copySourceCodeToClipboard() {
+      const sourceCodeElement = document.getElementById('sourceCodeContent');
+      if (!sourceCodeElement) {
+        alert('No source code to copy');
+        return;
+      }
+
+      // Get the actual source code from the code element inside the container
+      const codeElement = sourceCodeElement.querySelector('code');
+      if (!codeElement) {
+        alert('No source code to copy');
+        return;
+      }
+
+      // Extract the text content (this will be the HTML source code)
+      const sourceCode = codeElement.textContent || codeElement.innerText || '';
+
+      navigator.clipboard.writeText(sourceCode)
+        .then(() => {
+          alert('Source code copied to clipboard!');
+        })
+        .catch(err => {
+          console.error('Failed to copy source code: ', err);
+          // Fallback for browsers that don't support navigator.clipboard
+          const textArea = document.createElement('textarea');
+          textArea.value = sourceCode;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          alert('Source code copied to clipboard!');
+        });
+    }
   </script>
 </body>
 </html>
