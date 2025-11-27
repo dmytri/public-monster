@@ -37,44 +37,56 @@
 </script>
 <style>
 body {
-  background: #008080;
+  background-color: #008B8B;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", cursive;
   color: #000;
-  font-family: "Comic Neue", "Comic Sans MS", cursive;
-  margin: 20px;
-  position: relative;
+  margin: 0;
+  padding: 20px;
 }
 .container {
-  background: #c0c0c0;
-  border: 4px outset #fff;
-  padding: 20px;
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
+  background-color: #C0C0C0;
+  border: 3px solid #000;
+  padding: 20px;
+  box-shadow: 5px 5px 0px #000;
 }
 h1 {
-  color: #ff00ff;
-  font-family: Anton, Impact, "Arial Black", sans-serif;
-  text-shadow: 3px 3px 0 #000, 5px 5px 10px rgba(0,0,0,0.5);
-  font-size: 2em;
-  margin: 0 0 20px 0;
+  background: linear-gradient(90deg, #FF00FF, #00FFFF, #FFFF00);
+  color: #000;
+  padding: 15px;
   text-align: center;
-  letter-spacing: 1px;
+  border: 3px solid #000;
+  font-size: 2.5em;
+  margin: 0 0 20px 0;
+  text-shadow: 2px 2px #FFF;
 }
 h2 {
+  background-color: #FFFF00;
   color: #000;
-  background: #ff0;
-  padding: 5px 10px;
+  padding: 10px;
+  border: 2px dashed #000;
   display: inline-block;
-  font-size: 1.8em;
+  font-size: 1.5em;
+  margin-top: 20px;
 }
-p {
-  font-size: 1.1em;
-  line-height: 1.6;
-}
-.box {
-  background: #fff;
-  border: 2px inset #999;
+.pink-box {
+  background-color: #FFB6C1;
+  border: 2px solid #FF1493;
   padding: 15px;
-  margin: 20px 0;
+  margin: 15px 0;
+}
+.green-box {
+  background-color: #90EE90;
+  border: 2px solid #006400;
+  padding: 15px;
+  margin: 15px 0;
+}
+.blue-box {
+  background-color: #ADD8E6;
+  border: 2px solid #0000FF;
+  padding: 15px;
+  margin: 15px 0;
 }
 .blink {
   animation: blink 1s infinite;
@@ -83,8 +95,11 @@ p {
   50% { opacity: 0; }
 }
 a {
-  color: #00f;
+  color: #0000FF;
   text-decoration: underline;
+}
+a:visited {
+  color: #800080;
 }
 .center {
   text-align: center;
@@ -96,9 +111,10 @@ hr {
   margin: 20px 0;
 }
 code {
-  background: #fff;
-  padding: 2px 6px;
-  border: 1px solid #999;
+  background-color: #000;
+  color: #00FF00;
+  padding: 2px 5px;
+  font-family: "Courier New", monospace;
 }
 pre {
   background: #000;
@@ -112,7 +128,14 @@ pre {
 }
 pre .tag { color: #0ff; }
 pre .text { color: #ff0; }
-.construction{text-align:center;margin:20px 0;font-size:1em;background:#ff69b4;color:#000;padding:10px;font-weight:bold}
+.construction {
+  text-align: center;
+  background-color: #FFFF00;
+  border: 3px solid #000;
+  padding: 10px;
+  margin: 20px 0;
+  font-weight: bold;
+}
 @media(max-width:600px){h1{font-size:1.5em}h2{font-size:1.2em}}
 </style>
 </head>
@@ -120,9 +143,11 @@ pre .text { color: #ff0; }
 <div class="container">
 <h1>🌐 FAQ 🌐</h1>
 
-<p class="center blink">⚡ Your questions answered! ⚡</p>
+<div class="construction">
+  <span class="emoji">⚡</span> Your questions answered! <span class="emoji">⚡</span>
+</div>
 
-<div class="box">
+<div class="pink-box">
 <h2>❓ Getting Started</h2>
 
 <p><strong>Q: What's HTML?</strong><br>
@@ -136,7 +161,7 @@ A: 1) Make a file called <code>index.html</code> 2) Put some HTML in it 3) Uploa
 <strong>⚠️ Important:</strong> <code>index.html</code> must be in the root, NOT in a subfolder!</p>
 </div>
 
-<div class="box">
+<div class="green-box">
 <h2>🎨 Making Your Page</h2>
 
 <p><strong>Q: What should I put on my page?</strong><br>
@@ -149,7 +174,7 @@ A: Totally! Upload any HTML, CSS, JavaScript, images, whatever. We just serve yo
 A: Yes! Upload folders, images, stylesheets, scripts - everything. Just make sure you have an <code>index.html</code> <strong>in the root</strong> as your main page (not inside a subfolder).</p>
 </div>
 
-<div class="box" id="linking">
+<div class="blue-box" id="linking">
 <h2>🔗 Linking Files</h2>
 
 <p><strong>Q: Why don't my images/CSS/links work?</strong><br>
@@ -164,13 +189,17 @@ A: You're probably using the wrong path! There are two types of links:</p>
 <code>&lt;img src="/~yourusername/photo.jpg"&gt;</code><br>
 <code>&lt;link href="/~yourusername/css/style.css"&gt;</code></p>
 
-<p><strong>💡 Pro tip:</strong> Use relative links! They work locally AND on the server. Absolute links starting with a <code>/</code> slash (like <code>/~yourusername/</code>) only work on the server.</p>
+<p><strong>💡 Pro tip:</strong> Use relative links! They work locally AND on the server.<br>
+Absolute links starting with <code>/</code> (like <code>/~yourusername/</code>) only work on the server.</p>
+
+<p><strong>🔧 Another tip:</strong> Validate your HTML by going to your<br>
+<a href="/public_html" style="text-decoration:underline;font-weight:bold;">public_html</a> folder and clicking the validation icon (✅) next to your HTML files!</p>
 
 <p><strong>Q: My page works locally but breaks online?</strong><br>
 A: Check your links! If you're using <code>file:///</code> paths or <code>C:\Users\</code> paths, those won't work on the web. Use relative paths instead.</p>
 </div>
 
-<div class="box">
+<div class="pink-box">
 <h2>📚 Learning Resources</h2>
 
 <p><strong>Q: Where can I learn HTML?</strong><br>
@@ -201,8 +230,14 @@ A: Sure! Here's a basic page:</p>
 <a href="/">← Back to public.monster</a> | <a href="/about">About</a>
 </p>
 
+<p class="center">
+  <a href="/tos">Terms of Service</a> |
+  <a href="/privacy-policy">Privacy Policy</a> |
+  <a href="/content-moderation">Content Moderation Policy</a>
+</p>
+
 <footer style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px groove #999;font-size:0.9em">
-Built with ❤️ by <a href="/~dmytri" rel="noopener">~dmytri</a>
+by <a href="/~dmytri" rel="noopener">~dmytri</a>
 </footer>
 
 </div>

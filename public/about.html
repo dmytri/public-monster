@@ -37,43 +37,56 @@
 </script>
 <style>
 body {
-  background: #008080;
+  background-color: #008B8B;
+  font-family: "Comic Neue", "Comic Sans MS", "Comic Sans", cursive;
   color: #000;
-  font-family: "Comic Neue", "Comic Sans MS", cursive;
-  margin: 20px;
+  margin: 0;
+  padding: 20px;
 }
 .container {
-  background: #c0c0c0;
-  border: 4px outset #fff;
-  padding: 20px;
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
+  background-color: #C0C0C0;
+  border: 3px solid #000;
+  padding: 20px;
+  box-shadow: 5px 5px 0px #000;
 }
 h1 {
-  color: #ff00ff;
-  font-family: Anton, Impact, "Arial Black", sans-serif;
-  text-shadow: 3px 3px 0 #000, 5px 5px 10px rgba(0,0,0,0.5);
-  font-size: 2em;
-  margin: 0 0 20px 0;
+  background: linear-gradient(90deg, #FF00FF, #00FFFF, #FFFF00);
+  color: #000;
+  padding: 15px;
   text-align: center;
-  letter-spacing: 1px;
+  border: 3px solid #000;
+  font-size: 2.5em;
+  margin: 0 0 20px 0;
+  text-shadow: 2px 2px #FFF;
 }
 h2 {
+  background-color: #FFFF00;
   color: #000;
-  background: #ff0;
-  padding: 5px 10px;
+  padding: 10px;
+  border: 2px dashed #000;
   display: inline-block;
-  font-size: 1.8em;
+  font-size: 1.5em;
+  margin-top: 20px;
 }
-p {
-  font-size: 1.1em;
-  line-height: 1.6;
-}
-.box {
-  background: #fff;
-  border: 2px inset #999;
+.pink-box {
+  background-color: #FFB6C1;
+  border: 2px solid #FF1493;
   padding: 15px;
-  margin: 20px 0;
+  margin: 15px 0;
+}
+.green-box {
+  background-color: #90EE90;
+  border: 2px solid #006400;
+  padding: 15px;
+  margin: 15px 0;
+}
+.blue-box {
+  background-color: #ADD8E6;
+  border: 2px solid #0000FF;
+  padding: 15px;
+  margin: 15px 0;
 }
 .blink {
   animation: blink 1s infinite;
@@ -82,8 +95,11 @@ p {
   50% { opacity: 0; }
 }
 a {
-  color: #00f;
+  color: #0000FF;
   text-decoration: underline;
+}
+a:visited {
+  color: #800080;
 }
 .center {
   text-align: center;
@@ -95,9 +111,10 @@ hr {
   margin: 20px 0;
 }
 code {
-  background: #fff;
-  padding: 2px 6px;
-  border: 1px solid #999;
+  background-color: #000;
+  color: #00FF00;
+  padding: 2px 5px;
+  font-family: "Courier New", monospace;
 }
 pre {
   background: #000;
@@ -108,6 +125,14 @@ pre {
   font-family: monospace;
   font-size: 0.9em;
 }
+.construction {
+  text-align: center;
+  background-color: #FFFF00;
+  border: 3px solid #000;
+  padding: 10px;
+  margin: 20px 0;
+  font-weight: bold;
+}
 @media(max-width:600px){h1{font-size:1.5em}h2{font-size:1.2em}}
 </style>
 </head>
@@ -115,25 +140,27 @@ pre {
 <div class="container">
 <h1>🌐 What is public.monster? 🌐</h1>
 
-<p class="center blink">⚡ Remember when the web was fun? ⚡</p>
+<div class="construction">
+  <span class="emoji">⚡</span> Remember when the web was fun? <span class="emoji">⚡</span>
+</div>
 
-<div class="box">
+<div class="pink-box">
 <h2>📖 The Story</h2>
-<p>Back in the 90s, you could just drop some HTML files in your <pre>~/public_html</pre> folder and BAM — your site was live for the whole world to see.</p>
+<p>Back in the 90s, you could just put some HTML files in your <pre>~/public_html</pre> folder and BAM — your site was live for the whole world to see.</p>
 <p>No build steps. No frameworks. No deployment pipelines. Just pure, unfiltered creativity.</p>
 <p><strong>We want that feeling back.</strong></p>
 </div>
 
-<div class="box">
+<div class="green-box">
 <h2>🎨 What You Can Do</h2>
 <p>• Upload your HTML, CSS, images — whatever you want</p>
 <p>• Your site goes live instantly at <pre>public.monster/~yourusername</pre></p>
 <p>• Passwordless authentication (because it's 2025, not 1995)</p>
-<p>• Recursive folder uploads (drag your whole site)</p>
+<p>• Recursive folder uploads (upload your whole site)</p>
 <p>• That sweet, sweet 90s aesthetic</p>
 </div>
 
-<div class="box">
+<div class="blue-box">
 <h2>🚀 How It Works</h2>
 <p><strong>1.</strong> Sign up with your email (magic link, no passwords!)</p>
 <p><strong>2.</strong> Upload your files or folders</p>
@@ -142,7 +169,7 @@ pre {
 <p>Just HTML. Just vibes.</p>
 </div>
 
-<div class="box">
+<div class="pink-box">
 <h2>🚫 What public.monster is NOT</h2>
 <p>We're deliberately keeping it simple. This is <strong>not</strong>:</p>
 <p>• An online code editor or IDE</p>
@@ -155,7 +182,7 @@ pre {
 <p>Make it on your machine. Upload it here. Done.</p>
 </div>
 
-<div class="box">
+<div class="green-box">
 <h2>💭 The Philosophy</h2>
 <p><em>"The web was built by amateurs. That's what made it great."</em></p>
 <p>We believe:</p>
@@ -165,7 +192,7 @@ pre {
 <p>• Comic Sans is <strong>underrated</strong></p>
 </div>
 
-<div class="box">
+<div class="blue-box">
 <h2>⚙️ Tech Stack</h2>
 <p>For the curious:</p>
 <p>• <strong>Runtime:</strong> Bun</p>
@@ -183,8 +210,14 @@ pre {
 <a href="/">← Back to public.monster</a> | <a href="/faq">FAQ</a>
 </p>
 
+<p class="center">
+  <a href="/tos">Terms of Service</a> |
+  <a href="/privacy-policy">Privacy Policy</a> |
+  <a href="/content-moderation">Content Moderation Policy</a>
+</p>
+
 <footer style="text-align:center;margin-top:40px;padding-top:20px;border-top:2px groove #999;font-size:0.9em">
-Built with ❤️ by <a href="/~dmytri" rel="noopener">~dmytri</a>
+by <a href="/~dmytri" rel="noopener">~dmytri</a>
 </footer>
 
 </div>
