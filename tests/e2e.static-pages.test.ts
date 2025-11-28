@@ -75,7 +75,7 @@ test("GET /tos - serves Terms of Service page", async () => {
   expect(res.status).toBe(200);
   const text = await res.text();
   expect(text).toContain("Terms of Service");
-  expect(text).toContain("public.monster Terms of Service");
+  expect(text).toContain("<h1><span class=\"emoji\">🌐</span> Terms of Service <span class=\"emoji\">🌐</span></h1>");
   expect(text).not.toContain("HANKO_API_URL_PLACEHOLDER");
 }, 9000);
 
