@@ -1,0 +1,486 @@
+import { register } from "/assets/@teamhanko/hanko-elements/dist/elements.js";
+
+const { hanko } = await register(window.HANKO_API_URL);
+
+// Listen for session changes and reload page
+hanko.onSessionCreated(() => {
+  window.location.reload();
+});
+
+hanko.onSessionExpired(() => {
+  window.location.href = '/';
+});
+
+hanko.onUserDeleted(() => {
+  window.location.href = '/';
+});
+
+const token = await hanko.getSessionToken();
+if (!token) {
+  window.location.href = '/';
+}
+
+async function validateUserHTML() {
+  try {
+    let token = null;
+    try {
+      if (window.hanko) {
+        token = await window.hanko.getSessionToken();
+      } else {
+        token = window.hankoToken;
+      }
+    } catch (e) {
+      console.log("Hanko not initialized, trying fetch without auth");
+    }
+
+    // Check if there's a specific file to validate in the URL fragment
+    const filePath = window.location.hash ? decodeURIComponent(window.location.hash.substring(1)) : 'index.html';
+
+    // First, fetch the HTML content to validate
+    const contentRes = await fetch(`/api/files/content/${filePath}`, {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    });
+
+    if (contentRes.ok) {
+      const sourceCode = await contentRes.text();
+
+      // Display the source code
+      displaySourceCode(sourceCode);
+
+      // Run validation client-side immediately
+      const results = validateHtml(sourceCode);
+      displayValidationResults(results);
+    } else if (contentRes.status === 404) {
+      document.getElementById('validationResults').innerHTML =
+        '<div class="error">No index.html file found to validate. Please upload an index.html file first.</div>' +
+        '<p><a href="/">← Go to Dashboard to upload files</a></p>';
+    } else {
+      document.getElementById('validationResults').innerHTML =
+        `<div class="error">Could not fetch your HTML for validation: ${contentRes.status} ${contentRes.statusText}</div>`;
+    }
+  } catch (error) {
+    console.error('Error validating HTML:', error);
+    document.getElementById('validationResults').innerHTML =
+      `<div class="error">Error validating HTML: ${error.message}</div>`;
+  } finally {
+    // Hide loading indicator
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+// Display the HTML source code with syntax highlighting and line numbers
+function displaySourceCode(sourceCode) {
+  const sourceCodeElement = document.getElementById('sourceCodeContent');
+  // Encode the HTML to be displayed safely in a pre tag
+  const encodedSource = escapeHtml(sourceCode);
+  sourceCodeElement.innerHTML = `<pre class="line-numbers"><code class="language-html">${encodedSource}</code></pre>`;
+
+  // If Prism with line numbers plugin is loaded, highlight the newly added code
+  if (window.Prism && typeof Prism.highlightElement === 'function') {
+    const codeElement = sourceCodeElement.querySelector('code');
+    if (codeElement) {
+      // The line-numbers plugin should automatically handle line numbering
+      // when the element has the 'line-numbers' class
+      Prism.highlightElement(codeElement);
+    }
+  } else {
+    // If Prism hasn't loaded yet, wait for it to load and then highlight
+    // We'll add a mechanism to highlight once Prism is available
+    ensurePrismHighlight(sourceCodeElement.querySelector('code'));
+  }
+}
+
+// Function to ensure code gets highlighted once Prism is loaded
+function ensurePrismHighlight(codeElement) {
+  if (!codeElement) return;
+
+  // Check if Prism is available
+  if (window.Prism && typeof Prism.highlightElement === 'function') {
+    // The pre element containing the code should have line-numbers class for the plugin to work
+    const preElement = codeElement.closest('pre');
+    if (preElement && !preElement.classList.contains('line-numbers')) {
+      preElement.classList.add('line-numbers');
+    }
+    Prism.highlightElement(codeElement);
+  } else {
+    // Wait a bit and try again
+    setTimeout(() => ensurePrismHighlight(codeElement), 100);
+  }
+}
+
+// Display validation results in a user-friendly format
+function displayValidationResults(results) {
+  if (results.valid) {
+    document.getElementById('validationResults').innerHTML =
+      '<div class="success">✅ Your HTML looks good! No major issues found.</div>';
+  } else {
+    let resultHTML = '<h3>Issues Found:</h3><button id="copyResultsBtn" class="view-source-btn" style="float: right; margin-top: -40px;">📋 Copy Results</button><ul>';
+
+    // Group messages by severity
+    const errors = results.issues.filter(issue => issue.type.toLowerCase() === 'error');
+    const warnings = results.issues.filter(issue => issue.type.toLowerCase() !== 'error');
+
+    // Display errors first
+    errors.forEach(issue => {
+      // Properly escape the entire message to prevent browser from interpreting HTML tags
+      // that might be between brackets in HTMLHint's output
+      const escapedMessage = escapeHtml(issue.message);
+      // Add documentation link using the rule ID
+      const docLink = issue.rule ? ` <a href="https://htmlhint.com/rules/${issue.rule}/" target="_blank" rel="noopener noreferrer">(docs)</a>` : '';
+      resultHTML += `<li class="error"><strong>${issue.type}:</strong> ${escapedMessage}${docLink} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+      if (issue.codeSnippet) {
+        resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
+      }
+      resultHTML += '</li>';
+    });
+
+    // Then warnings
+    warnings.forEach(issue => {
+      const escapedMessage = escapeHtml(issue.message);
+      // Add documentation link using the rule ID
+      const docLink = issue.rule ? ` <a href="https://htmlhint.com/rules/${issue.rule}/" target="_blank" rel="noopener noreferrer">(docs)</a>` : '';
+      resultHTML += `<li class="warning"><strong>${issue.type}:</strong> ${escapedMessage}${docLink} at <a href="#" class="line-link" data-line="${issue.line}">line ${issue.line}</a>, col ${issue.column}<br>`;
+      if (issue.codeSnippet) {
+        resultHTML += `<code>&lt; &nbsp;${escapeHtml(issue.codeSnippet)}&nbsp; &gt;</code>`;
+      }
+      resultHTML += '</li>';
+    });
+
+    resultHTML += '</ul>';
+
+    // Add a summary at the top
+    const errorCount = errors.length;
+    const warningCount = warnings.length;
+    const totalCount = results.issues.length;
+
+    resultHTML = `<div class="error">Found ${totalCount} issue${totalCount !== 1 ? 's' : ''} (${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warningCount} warning${warningCount !== 1 ? 's' : ''})</div>` + resultHTML;
+
+    // Add a tip about HTML structure for beginners
+    if (errors.length > 0 || warnings.length > 0) {
+      resultHTML += '<div class="warning"><h3>💡 HTML Tips for Beginners:</h3>' +
+        '<ul>' +
+        '<li>HTML tags must be properly closed (e.g., &lt;p&gt;Content&lt;/p&gt;)</li>' +
+        '<li>Always include alt attributes for images: &lt;img src="image.jpg" alt="Description"&gt;</li>' +
+        '<li>Use double quotes for attribute values: &lt;a href="page.html"&gt;</li>' +
+        '<li>HTML tag names should be lowercase: &lt;p&gt; not &lt;P&gt;</li>' +
+        '</ul></div>';
+    }
+
+    document.getElementById('validationResults').innerHTML = resultHTML;
+
+    // Set up event listeners for line links in validation results
+    setupLineLinkListeners();
+
+    // Set up event listener for the copy results button
+    const copyButton = document.getElementById('copyResultsBtn');
+    if (copyButton) {
+      copyButton.addEventListener('click', function() {
+        copyValidationResultsToClipboard(results);
+      });
+    }
+  }
+}
+
+// Function to highlight a specific line in the source code view
+function highlightLine(lineNumber) {
+  const sourceCodeElement = document.getElementById('sourceCodeContent');
+  if (!sourceCodeElement) return;
+
+  // Make sure the source code section is visible
+  const container = document.getElementById('sourceCodeContainer');
+  if (container.style.display === 'none' || container.style.display === '') {
+    container.style.display = 'block';
+    const viewSourceBtn = document.getElementById('viewSourceBtn');
+    if (viewSourceBtn) {
+      viewSourceBtn.textContent = '-hide Source';
+    }
+  }
+
+  // Find the line number element
+  // Prism's line-numbers plugin adds line numbers as a pseudo-element,
+  // so we need to scroll to the appropriate line
+  const preElement = sourceCodeElement.querySelector('pre');
+  if (!preElement) return;
+
+  // Split the content by newlines to identify the target line
+  const codeElement = preElement.querySelector('code');
+  if (!codeElement) return;
+
+  // Get all the text content and split by lines
+  const lines = codeElement.textContent.split('\n');
+  if (lineNumber > 0 && lineNumber <= lines.length) {
+    // Get all the line number elements created by the line-numbers plugin
+    // Since Prism creates these dynamically, we'll add a temporary highlight
+    const lineIndex = lineNumber - 1; // Convert to 0-based index
+
+    // Create an array of all lines with line numbers
+    const allLines = lines.map((line, index) => {
+      if (index === lineIndex) {
+        // Highlight this line
+        return `<span class="line-highlight">${line}</span>`;
+      }
+      return line;
+    });
+
+    // Temporarily update the content to show the highlight
+    const originalHTML = codeElement.innerHTML;
+    codeElement.innerHTML = allLines.join('\n');
+
+    // Scroll to the highlighted line
+    const highlightedLine = codeElement.querySelector('.line-highlight');
+    if (highlightedLine) {
+      highlightedLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Remove highlight after a few seconds
+      setTimeout(() => {
+        codeElement.innerHTML = originalHTML;
+      }, 3000);
+    }
+  }
+}
+
+// Set up event listeners for line links in validation results
+function setupLineLinkListeners() {
+  // Use event delegation to handle clicks on line links
+  const validationResults = document.getElementById('validationResults');
+  if (!validationResults) return;
+
+  // Remove any existing listeners to avoid duplicates
+  validationResults.replaceWith(validationResults.cloneNode(true));
+  const newValidationResults = document.getElementById('validationResults');
+
+  newValidationResults.addEventListener('click', function(e) {
+    if (e.target.classList.contains('line-link')) {
+      e.preventDefault();
+      const lineNumber = parseInt(e.target.getAttribute('data-line'));
+      if (!isNaN(lineNumber)) {
+        highlightLine(lineNumber);
+      }
+    }
+  });
+}
+
+// Official escape-html function based on the npm module
+function escapeHtml(string) {
+  var str = '' + string;
+  var match = /["'&<>]/.exec(str);
+
+  if (!match) {
+    return str;
+  }
+
+  var escape;
+  var html = '';
+  var index = 0;
+  var lastIndex = 0;
+
+  for (index = match.index; index < str.length; index++) {
+    switch (str.charCodeAt(index)) {
+      case 34: // "
+        escape = '&quot;';
+        break;
+      case 38: // &
+        escape = '&amp;';
+        break;
+      case 39: // '
+        escape = '&#39;';
+        break;
+      case 60: // <
+        escape = '&lt;';
+        break;
+      case 62: // >
+        escape = '&gt;';
+        break;
+      default:
+        continue;
+    }
+
+    if (lastIndex !== index) {
+      html += str.substring(lastIndex, index);
+    }
+
+    lastIndex = index + 1;
+    html += escape;
+  }
+
+  return lastIndex !== index
+    ? html + str.substring(lastIndex, index)
+    : html;
+}
+
+// Client-side HTML validation function using htmlhint
+function validateHtml(html) {
+  // HTMLHint configuration matching the server-side rules
+  const ruleset = {
+    "tagname-lowercase": true,
+    "attr-lowercase": true,
+    "attr-value-double-quotes": true,
+    "html-lang-require": true,
+    "doctype-first": true,
+    "head-script-disabled": false, // Updated to allow head scripts for analytics
+    "style-disabled": false,
+    "inline-style-disabled": false,
+    "id-class-value": "dash",
+    "alt-require": true,
+    "attr-no-duplication": true,
+    "title-require": true,
+    "tag-pair": true,
+    "spec-char-escape": true,
+    "id-unique": true,
+    "src-require": true,
+    "attr-unsafe-chars": true,
+    "attr-whitespace": true
+  };
+
+  // Run htmlhint on the HTML content
+  const messages = HTMLHint.HTMLHint.verify(html, ruleset);
+
+  // Convert htmlhint messages to our format
+  const lines = html.split('\n');
+  const issues = messages.map(msg => {
+    // Extract the actual line content where the issue occurred
+    const actualLine = msg.line && msg.line <= lines.length ? lines[msg.line - 1] : '';
+
+    return {
+      type: msg.type.toLowerCase(), // error, warning
+      message: msg.message,
+      rule: msg.rule.id, // Capture the rule ID for documentation links
+      line: msg.line || 0,
+      column: msg.col || 0,
+      codeSnippet: actualLine.trim() || (msg.raw || '')
+    };
+  });
+
+  return {
+    valid: issues.length === 0,
+    issues: issues
+  };
+}
+
+// Copy validation results to clipboard in plain text format
+function copyValidationResultsToClipboard(results) {
+  if (results.valid) {
+    const plainText = "✅ Your HTML looks good! No major issues found.";
+    navigator.clipboard.writeText(plainText)
+      .then(() => {
+        alert('Validation results copied to clipboard!');
+      })
+      .catch(err => {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy to clipboard. Please try again.');
+      });
+    return;
+  }
+
+  // Group messages by severity
+  const errors = results.issues.filter(issue => issue.type.toLowerCase() === 'error');
+  const warnings = results.issues.filter(issue => issue.type.toLowerCase() !== 'error');
+
+  let plainText = `HTML Validation Results:\n\n`;
+
+  if (errors.length > 0) {
+    plainText += `Errors (${errors.length}):\n`;
+    errors.forEach((issue, index) => {
+      plainText += `${index + 1}. [${issue.type.toUpperCase()}] ${issue.message}\n`;
+      plainText += `   Line: ${issue.line}, Column: ${issue.column}\n`;
+      if (issue.rule) {
+        plainText += `   Documentation: https://htmlhint.com/rules/${issue.rule}/\n`;
+      }
+      if (issue.codeSnippet) {
+        plainText += `   Code: ${issue.codeSnippet}\n`;
+      }
+      plainText += `\n`;
+    });
+  }
+
+  if (warnings.length > 0) {
+    if (errors.length > 0) plainText += '\n'; // Add space between errors and warnings if both exist
+    plainText += `Warnings (${warnings.length}):\n`;
+    warnings.forEach((issue, index) => {
+      plainText += `${index + 1 + errors.length}. [${issue.type.toUpperCase()}] ${issue.message}\n`;
+      plainText += `   Line: ${issue.line}, Column: ${issue.column}\n`;
+      if (issue.rule) {
+        plainText += `   Documentation: https://htmlhint.com/rules/${issue.rule}/\n`;
+      }
+      if (issue.codeSnippet) {
+        plainText += `   Code: ${issue.codeSnippet}\n`;
+      }
+      plainText += `\n`;
+    });
+  }
+
+  // Add a summary at the end
+  const totalCount = results.issues.length;
+  plainText += `\nSummary: Found ${totalCount} issue${totalCount !== 1 ? 's' : ''} (${errors.length} error${errors.length !== 1 ? 's' : ''}, ${warnings.length} warning${warnings.length !== 1 ? 's' : ''})`;
+
+  navigator.clipboard.writeText(plainText)
+    .then(() => {
+      alert('Validation results copied to clipboard!');
+    })
+    .catch(err => {
+      console.error('Failed to copy: ', err);
+      // Fallback for browsers that don't support navigator.clipboard
+      const textArea = document.createElement('textarea');
+      textArea.value = plainText;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert('Validation results copied to clipboard!');
+    });
+}
+
+// Initialize by validating the user's HTML on page load
+window.addEventListener('DOMContentLoaded', (event) => {
+  // Set up view source button event listener
+  document.getElementById('viewSourceBtn').addEventListener('click', function() {
+    const container = document.getElementById('sourceCodeContainer');
+    if (container.style.display === 'none' || container.style.display === '') {
+      container.style.display = 'block';
+      this.textContent = '-hide Source';
+    } else {
+      container.style.display = 'none';
+      this.textContent = '👀 View Source';
+    }
+  });
+
+  // Set up copy source button event listener
+  document.getElementById('copySourceBtn').addEventListener('click', function() {
+    copySourceCodeToClipboard();
+  });
+
+  validateUserHTML();
+});
+
+// Copy source code to clipboard
+function copySourceCodeToClipboard() {
+  const sourceCodeElement = document.getElementById('sourceCodeContent');
+  if (!sourceCodeElement) {
+    alert('No source code to copy');
+    return;
+  }
+
+  // Get the actual source code from the code element inside the container
+  const codeElement = sourceCodeElement.querySelector('code');
+  if (!codeElement) {
+    alert('No source code to copy');
+    return;
+  }
+
+  // Extract the text content (this will be the HTML source code)
+  const sourceCode = codeElement.textContent || codeElement.innerText || '';
+
+  navigator.clipboard.writeText(sourceCode)
+    .then(() => {
+      alert('Source code copied to clipboard!');
+    })
+    .catch(err => {
+      console.error('Failed to copy source code: ', err);
+      // Fallback for browsers that don't support navigator.clipboard
+      const textArea = document.createElement('textarea');
+      textArea.value = sourceCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert('Source code copied to clipboard!');
+    });
+}
