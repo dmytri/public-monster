@@ -2,7 +2,7 @@
 
 **Remember when the web was fun?**
 
-Back in the 90s, you could just drop some HTML files in your `~/public_html` folder and BAM — your site was live for the whole world to see. No build steps. No frameworks. No deployment pipelines. Just pure, unfiltered creativity.
+Back in the 90s, you could just save some HTML files in your `~/public_html` folder and BAM — your site was live for the whole world to see. No build steps. No frameworks. No deployment pipelines. Just pure, unfiltered creativity.
 
 **We want that feeling back.**
 
@@ -13,7 +13,7 @@ Back in the 90s, you could just drop some HTML files in your `~/public_html` fol
 - 🎨 Upload your HTML, CSS, images — whatever
 - 🚀 Your site goes live instantly at `public.monster/~yourusername`
 - 🔐 Passwordless auth (because it's 2025, not 1995)
-- 💾 Recursive folder uploads (drag your whole site)
+- 💾 Recursive folder uploads
 - ✨ That sweet, sweet 90s aesthetic
 
 ## The Vibe
@@ -27,7 +27,7 @@ Back in the 90s, you could just drop some HTML files in your `~/public_html` fol
 ## How it works
 
 1. **Sign up** — Enter your email, get a magic link (no passwords!)
-2. **Upload** — Drag files or folders
+2. **Upload** — files or folders
 3. **Share** — Your site is live at `/~yourusername`
 
 That's it. No webpack. No npm install. No "building for production."

@@ -1,7 +1,7 @@
 # Qwen Code Instructions
 
 ## Environment
-**Bun + TypeScript only** - no external build tools or package managers.
+**Bun + TypeScript only** - no external build tools or package managers other than `bun`
 
 ## Core Rules
 - **Do only what is asked** - no features, improvements, or optimizations unless explicit
@@ -28,7 +28,7 @@
 **Exceptions:** The following packages are allowed:
 - `@teamhanko/hanko-elements` - for passwordless authentication UI components
 - `htmlhint` - for HTML linting
-- `escape-html` - to HTML espcaping
+- `prismjs` - for source viewing
 
 ## Testing Rules
 - **No mocks** - use configured sandbox services for integration testing

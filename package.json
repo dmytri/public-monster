@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@teamhanko/hanko-elements": "^2.2.1",
-    "escape-html": "^1.0.3",
     "htmlhint": "^1.8.0",
     "prismjs": "^1.30.0"
   },
