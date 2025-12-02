@@ -150,7 +150,7 @@ export function startServer(port: number = 3000, test: Record<string, string | n
         const assetPath = url.pathname.substring(8); // Remove '/assets/'
 
         // Only allow specific assets for security
-        if (!assetPath.startsWith('prismjs/') && !assetPath.startsWith('escape-html/') && !assetPath.startsWith('htmlhint/')) {
+        if (!assetPath.startsWith('prismjs/') && !assetPath.startsWith('escape-html/') && !assetPath.startsWith('htmlhint/') && !assetPath.startsWith('@teamhanko/hanko-elements/')) {
           return new Response("Not found", { status: 404 });
         }
 
@@ -183,6 +183,52 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       // Check if the requested path is one of our static pages
       if (['/tos', '/privacy-policy', '/content-moderation', '/validate-html'].includes(url.pathname)) {
         return serveStaticPage(url.pathname, HANKO_API_URL);
+      }
+
+      // Try to serve static files from the public directory
+      // Only serve files that don't match existing routes
+      // Security: Prevent directory traversal
+      const requestedPath = url.pathname;
+      // Check for directory traversal
+      if (requestedPath.includes('../') || requestedPath.includes('..\\')) {
+        return serve404Page(HANKO_API_URL);
+      }
+
+      const staticFilePath = `./public${requestedPath}`;
+      const file = Bun.file(staticFilePath);
+
+      if (await file.exists()) {
+        // Determine content type based on file extension
+        let contentType = "application/octet-stream";
+        if (staticFilePath.endsWith(".html")) {
+          contentType = "text/html";
+        } else if (staticFilePath.endsWith(".js")) {
+          contentType = "application/javascript";
+        } else if (staticFilePath.endsWith(".css")) {
+          contentType = "text/css";
+        } else if (staticFilePath.endsWith(".png")) {
+          contentType = "image/png";
+        } else if (staticFilePath.endsWith(".jpg") || staticFilePath.endsWith(".jpeg")) {
+          contentType = "image/jpeg";
+        } else if (staticFilePath.endsWith(".gif")) {
+          contentType = "image/gif";
+        } else if (staticFilePath.endsWith(".svg")) {
+          contentType = "image/svg+xml";
+        } else if (staticFilePath.endsWith(".json")) {
+          contentType = "application/json";
+        } else if (staticFilePath.endsWith(".txt")) {
+          contentType = "text/plain";
+        }
+
+        // For HTML files, replace HANKO_API_URL_PLACEHOLDER with the actual value
+        if (staticFilePath.endsWith(".html")) {
+          const fileContent = await file.text();
+          const processedContent = fileContent.replace(/HANKO_API_URL_PLACEHOLDER/g, HANKO_API_URL || '');
+          return new Response(processedContent, { headers: { "Content-Type": contentType } });
+        } else {
+          // For all other files, serve directly
+          return new Response(file, { headers: { "Content-Type": contentType } });
+        }
       }
 
       return serve404Page(HANKO_API_URL);

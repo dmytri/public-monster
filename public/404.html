@@ -7,49 +7,10 @@
 <link href="https://fonts.bunny.net/css?family=anton:400|comic-neue:400,700" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
 <title>404 - Page Not Found</title>
-<script type="module">
-import { register } from "https://esm.run/@teamhanko/hanko-elements";
-
-const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
-
-const token = await hanko.getSessionToken();
-if (token) {
-  window.hankoToken = token;
-  const user = await hanko.getUser();
-  const username = user.username;
-  
-  // Get current path
-  const path = window.location.pathname;
-  const filename = path.split('/').pop();
-  
-  if (filename) {
-    try {
-      const res = await fetch('/api/files', {
-        credentials: 'include'
-      });
-      
-      if (res.ok) {
-        const files = await res.json();
-        const matches = files.filter(f => f.ObjectName.includes(filename));
-        
-        if (matches.length > 0) {
-          const suggestionsDiv = document.getElementById('suggestions');
-          suggestionsDiv.style.display = 'block';
-          
-          const list = document.getElementById('matchList');
-          matches.forEach(match => {
-            const li = document.createElement('li');
-            li.innerHTML = `<code>${match.ObjectName}</code> → <a href="/~${username}/${match.ObjectName}">/~${username}/${match.ObjectName}</a>`;
-            list.appendChild(li);
-          });
-        }
-      }
-    } catch (e) {
-      console.error('Failed to check files', e);
-    }
-  }
-}
+<script>
+  window.HANKO_API_URL = "HANKO_API_URL_PLACEHOLDER";
 </script>
+<script type="module" src="/js/404.js"></script>
 <style>
 body{background:#008080;color:#000;font-family:"Comic Neue","Comic Sans MS",cursive;margin:20px}
 main{background:#c0c0c0;border:4px outset #fff;padding:20px;max-width:800px;margin:0 auto;position:relative}
