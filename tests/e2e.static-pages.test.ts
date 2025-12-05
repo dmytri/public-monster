@@ -12,7 +12,10 @@ setupTestHooks({'username': TEST_USERNAME}, TEST_PORT);
 // --- Static Pages E2E Tests ---
 
 test("about.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("./public/about.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/about`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/about`
@@ -31,7 +34,10 @@ test("about.html loads with expected DOM structure", async () => {
 }, 20000);
 
 test("faq.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("./public/faq.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/faq`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/faq`
@@ -50,7 +56,10 @@ test("faq.html loads with expected DOM structure", async () => {
 }, 20000);
 
 test("profile.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("./public/profile.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/profile`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/profile`

@@ -11,7 +11,10 @@ setupTestHooks({'username': TEST_USERNAME}, TEST_PORT);
 
 // --- E2E Tests for Validate HTML Page ---
 test("validate.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("./public/validate.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/validate`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/validate`
@@ -36,7 +39,10 @@ test("validate.html loads with expected DOM structure", async () => {
 }, 20000);
 
 test("validate.html includes view source functionality", async () => {
-  const htmlContent = await Bun.file("./public/validate.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/validate`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/validate`
@@ -76,7 +82,10 @@ test("validate.html includes view source functionality", async () => {
 }, 20000);
 
 test("validate.html view source button toggles source visibility", async () => {
-  const htmlContent = await Bun.file("./public/validate.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/validate`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/validate`
@@ -122,7 +131,10 @@ test("validate.html view source button toggles source visibility", async () => {
 }, 20000);
 
 test("validate.html source code displays with line numbers", async () => {
-  const htmlContent = await Bun.file("./public/validate.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(`${BASE_URL}/validate`);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: `${BASE_URL}/validate`

@@ -12,7 +12,10 @@ setupTestHooks({'username': TEST_USERNAME}, TEST_PORT);
 // --- Index Page E2E Tests ---
 
 test("index.html loads with expected DOM structure", async () => {
-  const htmlContent = await Bun.file("./public/index.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(BASE_URL);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({
     url: BASE_URL
@@ -38,7 +41,10 @@ test("index.html loads with expected DOM structure", async () => {
 }, 20000);
 
 test("Clear buttons on upload form work correctly", async () => {
-  const htmlContent = await Bun.file("./public/index.html").text();
+  // Get the actual HTML from the server
+  const response = await fetch(BASE_URL);
+  expect(response.status).toBe(200);
+  const htmlContent = await response.text();
 
   const window = new Window({ url: BASE_URL });
 
