@@ -1,6 +1,8 @@
 
 import { ArachnidShield } from "../vendor/arachnid-shield-sdk/src/index";
 import { parseArgs } from "util";
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 // Define command-line arguments
 const argsConfig = {
@@ -429,16 +431,63 @@ async function scanImageWithArachnidShield(imageUrl: string, reporter: any): Pro
   return result;
 }
 
-// Function to fetch file content from Bunny storage
-async function fetchFileContent(fileUrl: string): Promise<string> {
+// Function to build a properly encoded URL for a file path
+function buildFileUrl(objectName: string): string {
+  // Use encodeURI which is designed for full URIs and handles spaces properly (as %20)
+  return `${BUNNY_PULL_ZONE}${encodeURI(objectName)}`;
+}
+
+// Function to compute the SHA-256 hash of a string using Bun's CryptoHasher
+function computeContentHash(content: string): string {
+  const hasher = new Bun.CryptoHasher("sha256");
+  hasher.update(content);
+  return hasher.digest("hex");
+}
+
+// Function to check if a cached scan result exists for a given content hash and model
+function checkCachedScan(hash: string, model: string): boolean {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.${model}`);
+
+  // Ensure the cache directory exists
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+
+  return existsSync(cacheFilePath);
+}
+
+// Function to save a scan result to cache
+function saveScanToCache(hash: string, model: string): void {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.${model}`);
+
+  // Ensure the cache directory exists
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+
+  // Create an empty file to mark this content as safe for this model
+  Bun.write(cacheFilePath, "");
+}
+
+// Function to fetch file content from Bunny storage using the storage API
+async function fetchFileContent(objectName: string): Promise<string> {
   try {
-    const response = await fetch(fileUrl);
+    // Use the storage API directly instead of the pull zone to avoid URL encoding issues
+    const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
+    const response = await fetch(storageUrl, {
+      headers: {
+        AccessKey: BUNNY_API_KEY
+      }
+    });
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
     }
     return await response.text();
   } catch (error) {
-    console.error(`Error fetching file content from ${fileUrl}:`, error);
+    console.error(`Error fetching file content from ${BUNNY_STORAGE_URL}${objectName} via storage API:`, error);
     throw error;
   }
 }
@@ -813,16 +862,29 @@ Examples:
 
         for (let i = 0; i < groqFiles.length; i++) {
           const file = groqFiles[i];
-          const fileUrl = `${BUNNY_PULL_ZONE}${file.ObjectName}`;
 
           try {
-            const fileContent = await fetchFileContent(fileUrl);
+            const fileContent = await fetchFileContent(file.ObjectName);
+            const contentHash = computeContentHash(fileContent);
+
+            // Check if this content has already been scanned and found safe by GPT-OSS-Safeguard
+            if (checkCachedScan(contentHash, 'safeguard')) {
+              reporter.info(`  ${file.ObjectName}: GPT-OSS-SAFEGUARD OK (cached)`);
+              // Add a shorter delay for cached files
+              if (i < groqFiles.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
+              }
+              continue; // Skip scanning since it's already been checked and found safe
+            }
+
             const hasViolation = await moderateContentWithSafeguard(fileContent, reporter);
 
             if (hasViolation) {
               reporter.violation(file.ObjectName, 'GPT-OSS-SAFEGUARD TEXT');
             } else {
               reporter.ok(file.ObjectName, 'GPT-OSS-SAFEGUARD');
+              // Save to cache since the content is safe
+              saveScanToCache(contentHash, 'safeguard');
             }
 
             // Add a delay between file processing to avoid rate limiting
@@ -843,17 +905,45 @@ Examples:
 
         for (let i = 0; i < llamaGuardFiles.length; i++) {
           const file = llamaGuardFiles[i];
-          const fileUrl = `${BUNNY_PULL_ZONE}${file.ObjectName}`;
 
           // Determine if the file is an image based on its extension
           const isImageUrl = shieldExtensions.some(ext => file.ObjectName.toLowerCase().endsWith(ext));
 
           try {
             let contentForLlamaGuard: string;
+            let contentHash: string | null = null;
+
             if (isImageUrl) {
-              contentForLlamaGuard = fileUrl; // For images, pass the URL
+              // For images, we can still implement caching but will need the image content
+              const imageContent = await fetchFileContent(file.ObjectName);
+              contentHash = computeContentHash(imageContent);
+
+              // Check if this content has already been scanned and found safe by Llama Guard
+              if (checkCachedScan(contentHash, 'guard')) {
+                reporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
+                // Add a shorter delay for cached files
+                if (i < llamaGuardFiles.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
+                }
+                continue; // Skip scanning since it's already been checked and found safe
+              }
+
+              contentForLlamaGuard = buildFileUrl(file.ObjectName); // For images, pass the URL
             } else {
-              contentForLlamaGuard = await fetchFileContent(fileUrl); // For text, fetch content
+              const fileContent = await fetchFileContent(file.ObjectName);
+              contentHash = computeContentHash(fileContent);
+
+              // Check if this content has already been scanned and found safe by Llama Guard
+              if (checkCachedScan(contentHash, 'guard')) {
+                reporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
+                // Add a shorter delay for cached files
+                if (i < llamaGuardFiles.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
+                }
+                continue; // Skip scanning since it's already been checked and found safe
+              }
+
+              contentForLlamaGuard = fileContent; // For text, fetch content
             }
 
             const { hasViolation, result } = await moderateWithLlamaGuard(contentForLlamaGuard, isImageUrl, reporter);
@@ -862,6 +952,10 @@ Examples:
               reporter.violation(file.ObjectName, 'LLAMA GUARD', result);
             } else {
               reporter.ok(file.ObjectName, 'LLAMA GUARD');
+              // Save to cache since the content is safe (if we have a hash)
+              if (contentHash) {
+                saveScanToCache(contentHash, 'guard');
+              }
             }
 
             // Add a delay between file processing to avoid rate limiting
@@ -882,14 +976,25 @@ Examples:
 
         for (const shieldFile of shieldFiles) {
           try {
-            const imageUrl = `${BUNNY_PULL_ZONE}${shieldFile.ObjectName}`;
-            const scanResult = await scanImageWithArachnidShield(imageUrl, reporter);
+            // Fetch the image content via storage API to avoid URL encoding issues
+            const imageContent = await fetchFileContent(shieldFile.ObjectName);
+            const contentHash = computeContentHash(imageContent);
+
+            // Check if this content has already been scanned and found safe by Arachnid Shield
+            if (checkCachedScan(contentHash, 'shield')) {
+              reporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
+              continue; // Skip scanning since it's already been checked and found safe
+            }
+
+            const scanResult = await scanImageWithArachnidShield(imageContent, reporter);
 
             if (scanResult.status === 'ok' && scanResult.data.is_match) {
               const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
               reporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
             } else if (scanResult.status === 'ok') {
               reporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
+              // Save to cache since the content is safe
+              saveScanToCache(contentHash, 'shield');
             } else { // status is 'err' (already handled by catch, but good for explicit logic)
               reporter.error(shieldFile.ObjectName, scanResult.data);
             }
