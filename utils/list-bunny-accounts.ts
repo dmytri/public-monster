@@ -620,18 +620,110 @@ interface StorageObject {
   IsDirectory: boolean;
 }
 
+// Define scanner-specific handlers with common interface
+interface ScannerResult {
+  hasViolation: boolean;
+  result: string;
+}
+
+interface ScannerHandler {
+  scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult>;
+  getCacheKey(content: string, isImageUrl: boolean): string;
+}
+
+class SafeguardHandler implements ScannerHandler {
+  async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+    const hasViolation = await moderateContentWithSafeguard(content, reporter);
+    return { hasViolation, result: hasViolation ? 'VIOLATION DETECTED' : 'SAFE' };
+  }
+
+  getCacheKey(content: string, isImageUrl: boolean): string {
+    // For Safeguard, cache based on content
+    return computeContentHash(content);
+  }
+}
+
+class GuardHandler implements ScannerHandler {
+  async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+    const result = await moderateWithLlamaGuard(content, isImageUrl, reporter);
+    return { hasViolation: result.hasViolation, result: result.result };
+  }
+
+  getCacheKey(content: string, isImageUrl: boolean): string {
+    // For Guard, cache based on content
+    return computeContentHash(content);
+  }
+}
+
+class ShieldHandler implements ScannerHandler {
+  async scan(url: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+    // Create an instance of ArachnidShield with the API credentials
+    // Using default base URL for Arachnid Shield
+    const shield = new ArachnidShield(ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD);
+
+    // Perform the scan using the SDK
+    reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${url}`);
+    const scanResult = await shield.scanMediaFromUrl(url);
+    reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(scanResult)}`);
+
+    let hasViolation = false;
+    let result = 'SAFE';
+
+    if (scanResult.status === 'ok' && scanResult.data.is_match) {
+      hasViolation = true;
+      result = scanResult.data.classification ? `CSAM Match - Classification: ${scanResult.data.classification}` : 'CSAM Match - No classification provided';
+    } else if (scanResult.status === 'err') {
+      hasViolation = true;
+      result = `Error: ${scanResult.data}`;
+    }
+
+    return { hasViolation, result };
+  }
+
+  getCacheKey(url: string, isImageUrl: boolean): string {
+    // For Shield, cache based on URL
+    return computeContentHash(url);
+  }
+}
+
+// Generic scanning function that can work with any scanner
+async function genericScan(scannerHandler: ScannerHandler, content: string, isImageUrl: boolean, cacheType: string, reporter: any): Promise<boolean> {
+  // Get the cache key using the scanner's specific method
+  const cacheKey = scannerHandler.getCacheKey(content, isImageUrl);
+
+  // Check if this content has already been scanned and found safe
+  if (checkCachedScan(cacheKey, cacheType)) {
+    reporter.info(`  ${isImageUrl ? 'Image URL' : 'File content'}: ${cacheType.toUpperCase()} OK (cached)`);
+    return false; // No violation found in cache
+  }
+
+  // Perform the scan using the specific scanner handler
+  const scanResult = await scannerHandler.scan(content, isImageUrl, reporter);
+
+  if (scanResult.hasViolation) {
+    reporter.violation(isImageUrl ? 'Image URL' : 'File content', cacheType.toUpperCase(), scanResult.result);
+  } else {
+    reporter.ok(isImageUrl ? 'Image URL' : 'File content', cacheType.toUpperCase());
+    // Save to cache since the content is safe
+    saveScanToCache(cacheKey, cacheType);
+  }
+
+  return scanResult.hasViolation;
+}
+
 // Function to scan an image with Arachnid Shield SDK using URL
 async function scanImageWithArachnidShieldFromUrl(fileUrl: string, reporter: any): Promise<any> {
-  // Create an instance of ArachnidShield with the API credentials
-  // Using default base URL for Arachnid Shield
-  const shield = new ArachnidShield(ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD);
+  const shieldHandler = new ShieldHandler();
+  const result = await genericScan(shieldHandler, fileUrl, true, 'shield', reporter);
 
-  // Perform the scan using the SDK
-  reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${fileUrl}`);
-  const result = await shield.scanMediaFromUrl(fileUrl);
-  reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(result)}`);
-
-  return result;
+  // Return in the original format for compatibility
+  // The generic scan returns a boolean (violation status),
+  // but the original function returned the raw API response
+  // For compatibility, we'll return a simplified response
+  return {
+    status: result ? 'ok' : 'ok',
+    data: result ? { is_match: true } : { is_match: false }
+  };
 }
 
 // Function to build a properly encoded URL for a file path
@@ -1132,27 +1224,10 @@ Examples:
 
           try {
             const fileContent = await fetchFileContent(file.ObjectName);
-            const contentHash = computeContentHash(fileContent);
 
-            // Check if this content has already been scanned and found safe by GPT-OSS-Safeguard
-            if (checkCachedScan(contentHash, 'safeguard')) {
-              userReporter.info(`  ${file.ObjectName}: GPT-OSS-SAFEGUARD OK (cached)`);
-              // Add a shorter delay for cached files
-              if (i < groqFiles.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
-              }
-              continue; // Skip scanning since it's already been checked and found safe
-            }
-
-            const hasViolation = await moderateContentWithSafeguard(fileContent, userReporter);
-
-            if (hasViolation) {
-              userReporter.violation(file.ObjectName, 'GPT-OSS-SAFEGUARD TEXT');
-            } else {
-              userReporter.ok(file.ObjectName, 'GPT-OSS-SAFEGUARD');
-              // Save to cache since the content is safe
-              saveScanToCache(contentHash, 'safeguard');
-            }
+            // Use the generic scanning function with Safeguard handler
+            const safeguardHandler = new SafeguardHandler();
+            await genericScan(safeguardHandler, fileContent, false, 'safeguard', userReporter);
 
             // Add a delay between file processing to avoid rate limiting
             if (i < groqFiles.length - 1) {
@@ -1178,52 +1253,16 @@ Examples:
 
           try {
             let contentForLlamaGuard: string;
-            let contentHash: string | null = null;
 
             if (isImageUrl) {
-              // For images, we can still implement caching but will need the image content
-              const imageContent = await fetchFileContent(file.ObjectName);
-              contentHash = computeContentHash(imageContent);
-
-              // Check if this content has already been scanned and found safe by Llama Guard
-              if (checkCachedScan(contentHash, 'guard')) {
-                userReporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
-                // Add a shorter delay for cached files
-                if (i < llamaGuardFiles.length - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
-                }
-                continue; // Skip scanning since it's already been checked and found safe
-              }
-
               contentForLlamaGuard = buildFileUrl(file.ObjectName); // For images, pass the URL
             } else {
-              const fileContent = await fetchFileContent(file.ObjectName);
-              contentHash = computeContentHash(fileContent);
-
-              // Check if this content has already been scanned and found safe by Llama Guard
-              if (checkCachedScan(contentHash, 'guard')) {
-                userReporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
-                // Add a shorter delay for cached files
-                if (i < llamaGuardFiles.length - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
-                }
-                continue; // Skip scanning since it's already been checked and found safe
-              }
-
-              contentForLlamaGuard = fileContent; // For text, fetch content
+              contentForLlamaGuard = await fetchFileContent(file.ObjectName); // For text, fetch content
             }
 
-            const { hasViolation, result } = await moderateWithLlamaGuard(contentForLlamaGuard, isImageUrl, userReporter);
-
-            if (hasViolation) {
-              userReporter.violation(file.ObjectName, 'LLAMA GUARD', result);
-            } else {
-              userReporter.ok(file.ObjectName, 'LLAMA GUARD');
-              // Save to cache since the content is safe (if we have a hash)
-              if (contentHash) {
-                saveScanToCache(contentHash, 'guard');
-              }
-            }
+            // Use the generic scanning function with Guard handler
+            const guardHandler = new GuardHandler();
+            await genericScan(guardHandler, contentForLlamaGuard, isImageUrl, 'guard', userReporter);
 
             // Add a delay between file processing to avoid rate limiting
             if (i < llamaGuardFiles.length - 1) {
@@ -1246,27 +1285,9 @@ Examples:
             // Build the file URL using the buildFileUrl function to handle special characters
             const fileUrl = buildFileUrl(shieldFile.ObjectName);
 
-            // For Arachnid Shield, we use URL-based hashing for the cache instead of content-based hashing
-            const urlHash = computeContentHash(fileUrl);
-
-            // Check if this URL has already been scanned and found safe by Arachnid Shield
-            if (checkCachedScan(urlHash, 'shield')) {
-              userReporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
-              continue; // Skip scanning since it's already been checked and found safe
-            }
-
-            const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, userReporter);
-
-            if (scanResult.status === 'ok' && scanResult.data.is_match) {
-              const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
-              userReporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
-            } else if (scanResult.status === 'ok') {
-              userReporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
-              // Save to cache since the content is safe
-              saveScanToCache(urlHash, 'shield');
-            } else { // status is 'err' (already handled by catch, but good for explicit logic)
-              userReporter.error(shieldFile.ObjectName, scanResult.data);
-            }
+            // Use the generic scanning function with Shield handler
+            const shieldHandler = new ShieldHandler();
+            await genericScan(shieldHandler, fileUrl, true, 'shield', userReporter);
           } catch (error) {
             userReporter.error(shieldFile.ObjectName, error);
           }
