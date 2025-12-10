@@ -907,10 +907,74 @@ Examples:
   }
 
   if (usernameFolders.length > 0) {
-    console.log("Username Folders (Directories):");
-    console.log("===============================");
+    if (!args['violations-only']) {
+      console.log("Username Folders (Directories):");
+      console.log("===============================");
+    }
     for (const dir of usernameFolders) {
-      console.log(`. ${dir.ObjectName}/`);
+      // Track if any violations were found for this user
+      let userHasViolations = false;
+
+      // Create a custom reporter that tracks violations for this user
+      const userReporter = {
+        verbose: reporter.verbose,
+        violationsOnly: reporter.violationsOnly,
+        depth: reporter.depth,
+
+        // Reports a successful scan (no violation).
+        ok(file: string, scanner: string) {
+          if (this.violationsOnly) return; // In violations-only mode, successful scans are silent.
+
+          const message = this.verbose
+            ? `        Status: No violation detected by ${scanner}`
+            : `  ${file}: ${scanner} OK`;
+          console.log(message);
+        },
+
+        // Reports a detected violation.
+        violation(file: string, scanner: string, details?: string) {
+          userHasViolations = true; // Mark this user as having violations
+          const baseMessage = this.verbose
+            ? `        Status: ${scanner} VIOLATION DETECTED`
+            : `  ${file}: ${scanner} VIOLATION DETECTED`;
+
+          console.log(baseMessage);
+          if (this.verbose && details) {
+            console.log(`        Details: ${details}`);
+          }
+        },
+
+        // Reports general information, respecting output rules.
+        info(message: string) {
+          // Info is only shown if not in violations-only mode.
+          if (!this.violationsOnly) {
+            console.log(message);
+          }
+        },
+
+        // Reports verbose-only information.
+        verboseInfo(message: string) {
+          if (this.verbose) {
+            console.log(message);
+          }
+        },
+
+        // Provides JSON string representation with configurable depth
+        jsonString(obj: any): string {
+          return JSON.stringify(obj, null, this.depth);
+        },
+
+        // Reports an error for a specific file.
+        error(file: string, error: any) {
+          console.error(`        Error scanning ${file}:`, error);
+          userHasViolations = true; // Consider errors as violations for this purpose
+        }
+      };
+
+      // Output username only if not using violations-only mode, or if violations will be found later
+      if (!args['violations-only']) {
+        console.log(`. ${dir.ObjectName}/`);
+      }
 
       // Get objects in each username folder (recursively)
       const folderObjects = await getAllObjectsRecursively(`/${dir.ObjectName}/`);
@@ -1061,7 +1125,7 @@ Examples:
 
       // Scan files that should be scanned with GPT-OSS-Safeguard (text-based files)
       if (runSafeguardScan && groqFiles.length > 0) {
-        reporter.info(`    Text-based files found (GPT-OSS-Safeguard): ${groqFiles.length}`);
+        userReporter.info(`    Text-based files found (GPT-OSS-Safeguard): ${groqFiles.length}`);
 
         for (let i = 0; i < groqFiles.length; i++) {
           const file = groqFiles[i];
@@ -1072,7 +1136,7 @@ Examples:
 
             // Check if this content has already been scanned and found safe by GPT-OSS-Safeguard
             if (checkCachedScan(contentHash, 'safeguard')) {
-              reporter.info(`  ${file.ObjectName}: GPT-OSS-SAFEGUARD OK (cached)`);
+              userReporter.info(`  ${file.ObjectName}: GPT-OSS-SAFEGUARD OK (cached)`);
               // Add a shorter delay for cached files
               if (i < groqFiles.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
@@ -1080,12 +1144,12 @@ Examples:
               continue; // Skip scanning since it's already been checked and found safe
             }
 
-            const hasViolation = await moderateContentWithSafeguard(fileContent, reporter);
+            const hasViolation = await moderateContentWithSafeguard(fileContent, userReporter);
 
             if (hasViolation) {
-              reporter.violation(file.ObjectName, 'GPT-OSS-SAFEGUARD TEXT');
+              userReporter.violation(file.ObjectName, 'GPT-OSS-SAFEGUARD TEXT');
             } else {
-              reporter.ok(file.ObjectName, 'GPT-OSS-SAFEGUARD');
+              userReporter.ok(file.ObjectName, 'GPT-OSS-SAFEGUARD');
               // Save to cache since the content is safe
               saveScanToCache(contentHash, 'safeguard');
             }
@@ -1095,16 +1159,16 @@ Examples:
               await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
             }
           } catch (error) {
-            reporter.error(file.ObjectName, error);
+            userReporter.error(file.ObjectName, error);
           }
         }
       } else if (runSafeguardScan) {
-        reporter.info("    No text-based files found for GPT-OSS-Safeguard");
+        userReporter.info("    No text-based files found for GPT-OSS-Safeguard");
       }
 
       // Scan files with Llama Guard
       if (runLlamaGuardScan && llamaGuardFiles.length > 0) {
-        reporter.info(`    Text and image files found (Llama Guard): ${llamaGuardFiles.length}`);
+        userReporter.info(`    Text and image files found (Llama Guard): ${llamaGuardFiles.length}`);
 
         for (let i = 0; i < llamaGuardFiles.length; i++) {
           const file = llamaGuardFiles[i];
@@ -1123,7 +1187,7 @@ Examples:
 
               // Check if this content has already been scanned and found safe by Llama Guard
               if (checkCachedScan(contentHash, 'guard')) {
-                reporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
+                userReporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
                 // Add a shorter delay for cached files
                 if (i < llamaGuardFiles.length - 1) {
                   await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
@@ -1138,7 +1202,7 @@ Examples:
 
               // Check if this content has already been scanned and found safe by Llama Guard
               if (checkCachedScan(contentHash, 'guard')) {
-                reporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
+                userReporter.info(`  ${file.ObjectName}: LLAMA GUARD OK (cached)`);
                 // Add a shorter delay for cached files
                 if (i < llamaGuardFiles.length - 1) {
                   await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay for cached
@@ -1149,12 +1213,12 @@ Examples:
               contentForLlamaGuard = fileContent; // For text, fetch content
             }
 
-            const { hasViolation, result } = await moderateWithLlamaGuard(contentForLlamaGuard, isImageUrl, reporter);
+            const { hasViolation, result } = await moderateWithLlamaGuard(contentForLlamaGuard, isImageUrl, userReporter);
 
             if (hasViolation) {
-              reporter.violation(file.ObjectName, 'LLAMA GUARD', result);
+              userReporter.violation(file.ObjectName, 'LLAMA GUARD', result);
             } else {
-              reporter.ok(file.ObjectName, 'LLAMA GUARD');
+              userReporter.ok(file.ObjectName, 'LLAMA GUARD');
               // Save to cache since the content is safe (if we have a hash)
               if (contentHash) {
                 saveScanToCache(contentHash, 'guard');
@@ -1166,16 +1230,16 @@ Examples:
               await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
             }
           } catch (error) {
-            reporter.error(file.ObjectName, error);
+            userReporter.error(file.ObjectName, error);
           }
         }
       } else if (runLlamaGuardScan) {
-        reporter.info("    No text or image files found for Llama Guard");
+        userReporter.info("    No text or image files found for Llama Guard");
       }
 
       // Scan files with Arachnid Shield
       if (runShieldScan && shieldFiles.length > 0) {
-        reporter.info(`    Media files found: ${shieldFiles.length}`);
+        userReporter.info(`    Media files found: ${shieldFiles.length}`);
 
         for (const shieldFile of shieldFiles) {
           try {
@@ -1187,31 +1251,36 @@ Examples:
 
             // Check if this URL has already been scanned and found safe by Arachnid Shield
             if (checkCachedScan(urlHash, 'shield')) {
-              reporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
+              userReporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
               continue; // Skip scanning since it's already been checked and found safe
             }
 
-            const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, reporter);
+            const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, userReporter);
 
             if (scanResult.status === 'ok' && scanResult.data.is_match) {
               const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
-              reporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
+              userReporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
             } else if (scanResult.status === 'ok') {
-              reporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
+              userReporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
               // Save to cache since the content is safe
               saveScanToCache(urlHash, 'shield');
             } else { // status is 'err' (already handled by catch, but good for explicit logic)
-              reporter.error(shieldFile.ObjectName, scanResult.data);
+              userReporter.error(shieldFile.ObjectName, scanResult.data);
             }
           } catch (error) {
-            reporter.error(shieldFile.ObjectName, error);
+            userReporter.error(shieldFile.ObjectName, error);
           }
         }
       } else if (runShieldScan) {
-        reporter.info("    No media files found");
+        userReporter.info("    No media files found");
       }
 
-      reporter.info(""); // Add a blank line for readability between users
+      // Output username if violations-only mode and this user had violations
+      if (args['violations-only'] && userHasViolations) {
+        console.log(`. ${dir.ObjectName}/`);
+      }
+
+      userReporter.info(""); // Add a blank line for readability between users
     }
   } else {
     console.log("No username folders found.");
