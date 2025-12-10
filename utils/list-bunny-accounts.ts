@@ -417,17 +417,17 @@ interface StorageObject {
   IsDirectory: boolean;
 }
 
-// Function to scan an image with Arachnid Shield SDK
-async function scanImageWithArachnidShield(imageUrl: string, reporter: any): Promise<any> {
+// Function to scan an image with Arachnid Shield SDK using URL
+async function scanImageWithArachnidShieldFromUrl(fileUrl: string, reporter: any): Promise<any> {
   // Create an instance of ArachnidShield with the API credentials
   // Using default base URL for Arachnid Shield
   const shield = new ArachnidShield(ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD);
 
   // Perform the scan using the SDK
-  reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${imageUrl}`);
-  const result = await shield.scanMediaFromUrl(imageUrl);
+  reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${fileUrl}`);
+  const result = await shield.scanMediaFromUrl(fileUrl);
   reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(result)}`);
-  
+
   return result;
 }
 
@@ -437,9 +437,9 @@ function buildFileUrl(objectName: string): string {
   return `${BUNNY_PULL_ZONE}${encodeURI(objectName)}`;
 }
 
-// Function to compute the SHA-256 hash of a string using Bun's CryptoHasher
+// Function to compute the MD4 hash of a string using Bun's CryptoHasher
 function computeContentHash(content: string): string {
-  const hasher = new Bun.CryptoHasher("sha256");
+  const hasher = new Bun.CryptoHasher("md4");
   hasher.update(content);
   return hasher.digest("hex");
 }
@@ -976,17 +976,19 @@ Examples:
 
         for (const shieldFile of shieldFiles) {
           try {
-            // Fetch the image content via storage API to avoid URL encoding issues
-            const imageContent = await fetchFileContent(shieldFile.ObjectName);
-            const contentHash = computeContentHash(imageContent);
+            // Build the file URL using the buildFileUrl function to handle special characters
+            const fileUrl = buildFileUrl(shieldFile.ObjectName);
 
-            // Check if this content has already been scanned and found safe by Arachnid Shield
-            if (checkCachedScan(contentHash, 'shield')) {
+            // For Arachnid Shield, we use URL-based hashing for the cache instead of content-based hashing
+            const urlHash = computeContentHash(fileUrl);
+
+            // Check if this URL has already been scanned and found safe by Arachnid Shield
+            if (checkCachedScan(urlHash, 'shield')) {
               reporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
               continue; // Skip scanning since it's already been checked and found safe
             }
 
-            const scanResult = await scanImageWithArachnidShield(imageContent, reporter);
+            const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, reporter);
 
             if (scanResult.status === 'ok' && scanResult.data.is_match) {
               const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
@@ -994,7 +996,7 @@ Examples:
             } else if (scanResult.status === 'ok') {
               reporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
               // Save to cache since the content is safe
-              saveScanToCache(contentHash, 'shield');
+              saveScanToCache(urlHash, 'shield');
             } else { // status is 'err' (already handled by catch, but good for explicit logic)
               reporter.error(shieldFile.ObjectName, scanResult.data);
             }
