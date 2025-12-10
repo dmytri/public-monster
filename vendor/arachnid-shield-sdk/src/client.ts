@@ -10,7 +10,7 @@ import {
 import { Blob } from 'buffer';
 import axios from 'axios';
 
-const ARACHNID_SHIELD_BASE_URL: string = 'https://shield.projectarachnid.ca/';
+const ARACHNID_SHIELD_BASE_URL: string = 'https://shield.projectarachnid.com/';
 
 /**
  * The type of response returned from the Arachnid Shield API.
