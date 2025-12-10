@@ -271,8 +271,36 @@ async function moderateContentWithSafeguard(content: string, reporter: any): Pro
       continue;
     }
 
+    // Handle 413 Request Too Large
+    if (response.status === 413) {
+      const errorDetails = await response.text();
+      reporter.verboseInfo(`        Request Too Large (413): ${errorDetails}`);
+
+      // For 413 errors, we should consider this a potential violation since large payloads might contain harmful content
+      hasViolation = true;
+      continue;
+    }
+
     if (!response.ok) {
       reporter.verboseInfo(`        API request failed with status ${response.status}`);
+
+      // For other non-success status codes, handle them appropriately
+      if (response.status === 400) { // Bad Request
+        const errorDetails = await response.text();
+        reporter.verboseInfo(`        Bad Request (400): ${errorDetails}`);
+        // Consider this as a potential violation - malformed content might be an attempt to bypass filters
+        hasViolation = true;
+      } else if (response.status >= 500) { // Server errors
+        const errorDetails = await response.text();
+        reporter.verboseInfo(`        Server Error (${response.status}): ${errorDetails}`);
+        // For server errors, we should try to continue rather than marking as violation
+        // The error might be temporary, so we'll continue processing other chunks
+      } else {
+        // For other errors, log them but continue processing
+        const errorDetails = await response.text();
+        reporter.verboseInfo(`        API Error (${response.status}): ${errorDetails}`);
+      }
+
       continue;
     }
 
@@ -352,61 +380,236 @@ async function moderateWithLlamaGuard(content: string, isImageUrl: boolean, repo
     return { hasViolation: false, result: "SAFE (empty content)" };
   }
 
-  const contentToModerate = isImageUrl ? `Image URL: ${content}` : content;
+  // Define max chunk size for Llama Guard (may be different from Safeguard)
+  const maxChunkSize = 28000;
+  let contentChunks = [];
 
-  const requestBody = {
-    model: 'meta-llama/llama-guard-4-12b',
-    messages: [
-      {
-        role: 'system',
-        content: llamaGuardPolicy
-      },
-      {
-        role: 'user',
-        content: contentToModerate
+  if (content.length <= maxChunkSize) {
+    contentChunks = [isImageUrl ? `Image URL: ${content}` : content];
+  } else {
+    // For images, we shouldn't chunk the URL, so return early
+    if (isImageUrl) {
+      return { hasViolation: true, result: "ERROR: Image URLs cannot be chunked for Llama Guard" };
+    }
+
+    // Split content preserving HTML tags for HTML content
+    if (content.includes('<') && content.includes('>')) {
+      const tagBoundaries = /(<\/\w+>)/g;
+      let segments = [];
+      let lastIndex = 0;
+      let match;
+      let currentChunk = '';
+
+      while ((match = tagBoundaries.exec(content)) !== null) {
+        const segment = content.substring(lastIndex, match.index + match[0].length);
+
+        if ((currentChunk + segment).length > maxChunkSize && currentChunk !== '') {
+          segments.push(currentChunk);
+          currentChunk = segment;
+        } else {
+          currentChunk += segment;
+        }
+
+        lastIndex = match.index + match[0].length;
       }
-    ],
-    temperature: 0,
-    max_tokens: 200, // Llama Guard responses should be short (SAFE or UNSAFE: O#)
-    stream: false
-  };
 
-  try {
-    reporter.verboseInfo(`        Llama Guard API Request: model=meta-llama/llama-guard-4-12b, content_length=${contentToModerate.length}, is_image=${isImageUrl}`);
+      if (lastIndex < content.length) {
+        const remaining = content.substring(lastIndex);
+        if ((currentChunk + remaining).length <= maxChunkSize) {
+          currentChunk += remaining;
+        } else {
+          if (currentChunk !== '') {
+            segments.push(currentChunk);
+          }
+          if (remaining.length > maxChunkSize) {
+            for (let i = 0; i < remaining.length; i += maxChunkSize) {
+              segments.push(remaining.substring(i, i + maxChunkSize));
+            }
+          } else {
+            segments.push(remaining);
+          }
+          currentChunk = '';
+        }
+      }
 
-    const response = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify(requestBody)
-    });
+      if (currentChunk.trim() !== '') {
+        segments.push(currentChunk);
+      }
 
-    const data = await response.json();
+      contentChunks = segments;
+    } else {
+      // For non-HTML content
+      const paragraphs = content.split(/(?:\r?\n\s*){2,}/);
+      let currentChunk = '';
 
-    if (!response.ok) {
-      const errorResult = `Request failed with status ${response.status}: ${reporter.jsonString(data)}`;
-      reporter.error("Llama Guard API", errorResult);
-      return { hasViolation: true, result: `API Error: ${errorResult}` };
+      for (const paragraph of paragraphs) {
+        if ((currentChunk + paragraph).length > maxChunkSize && currentChunk !== '') {
+          contentChunks.push(currentChunk);
+          currentChunk = paragraph;
+        } else {
+          currentChunk += paragraph;
+        }
+      }
+
+      if (currentChunk.trim() !== '') {
+        contentChunks.push(currentChunk);
+      }
     }
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      const errorResult = `Unexpected Llama Guard response format: ${reporter.jsonString(data)}`;
-      reporter.verboseInfo(`        ${errorResult}`);
-      return { hasViolation: true, result: `API Format Error: ${errorResult}` };
-    }
-
-    const result = data.choices[0]?.message?.content?.trim() || '';
-    reporter.verboseInfo(`        Llama Guard API Result:\n${result}`);
-
-    const isUnsafe = result.startsWith("UNSAFE");
-    return { hasViolation: isUnsafe, result: isUnsafe ? result : "SAFE" };
-
-  } catch (error: any) {
-    reporter.error("Llama Guard API", error);
-    return { hasViolation: true, result: `Exception during API call: ${error.message || error}` };
   }
+
+  let hasViolation = false;
+  let lastResult = "SAFE";
+
+  for (let i = 0; i < contentChunks.length; i++) {
+    const chunk = contentChunks[i];
+
+    reporter.verboseInfo(`        Llama Guard API Request [chunk ${i+1}/${contentChunks.length}]: model=meta-llama/llama-guard-4-12b, content_length=${chunk.length}, is_image=${isImageUrl}`);
+
+    const requestBody = {
+      model: 'meta-llama/llama-guard-4-12b',
+      messages: [
+        {
+          role: 'system',
+          content: llamaGuardPolicy
+        },
+        {
+          role: 'user',
+          content: chunk
+        }
+      ],
+      temperature: 0,
+      max_tokens: 200, // Llama Guard responses should be short (SAFE or UNSAFE: O#)
+      stream: false
+    };
+
+    try {
+      const response = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${GROQ_API_KEY}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.status !== 200) {
+        reporter.verboseInfo(`        Llama Guard API Response [chunk ${i+1}/${contentChunks.length}]: status=${response.status}`);
+      }
+
+      // Handle 429 rate limiting
+      if (response.status === 429) {
+        const errorDetails = await response.text();
+        reporter.verboseInfo(`        Llama Guard Rate Limit Response: ${errorDetails}`);
+
+        // Extract wait time from the error message
+        let waitTime = 10000; // Default wait time
+        try {
+          const errorObj = JSON.parse(errorDetails);
+          if (errorObj.error?.message) {
+            // Look for the wait time in the error message (e.g., "try again in 4.803999999s")
+            const match = errorObj.error.message.match(/try again in (\d+\.?\d*)s/);
+            if (match) {
+              const apiWaitTime = parseFloat(match[1]);
+              waitTime = Math.ceil(apiWaitTime * 1000) + 5000; // API wait time + 5 seconds
+            }
+          }
+        } catch (e) {
+          // If parsing fails, use the default wait time
+        }
+
+        reporter.verboseInfo(`        Waiting ${waitTime/1000}s (API suggested + 5s) due to rate limit...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+
+        // Retry once after the wait period
+        const retryResponse = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${GROQ_API_KEY}`
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (retryResponse.status !== 200) {
+          reporter.verboseInfo(`        Llama Guard retry failed with status ${retryResponse.status}`);
+          continue;
+        }
+
+        const retryData = await retryResponse.json();
+        const retryResult = retryData.choices?.[0]?.message?.content?.trim() || '';
+
+        reporter.verboseInfo(`        Llama Guard retry result [chunk ${i+1}/${contentChunks.length}]:\n${retryResult}`);
+
+        const isUnsafe = retryResult.startsWith("UNSAFE");
+        if (isUnsafe) {
+          hasViolation = true;
+          lastResult = retryResult;
+        } else {
+          lastResult = "SAFE";
+        }
+
+        continue;
+      }
+
+      // Handle 413 Request Too Large
+      if (response.status === 413) {
+        const errorDetails = await response.text();
+        reporter.verboseInfo(`        Llama Guard Request Too Large: ${errorDetails}`);
+        return { hasViolation: true, result: `ERROR: Request too large (413) - ${errorDetails}` };
+      }
+
+      // Handle 400 Bad Request specifically
+      if (response.status === 400) {
+        const errorDetails = await response.text();
+        reporter.verboseInfo(`        Llama Guard Bad Request (400): ${errorDetails}`);
+
+        // For 400 errors, this could be due to malformed content or other issues with this particular chunk
+        // We'll consider this a potential violation since malformed content might be an attempt to bypass filters
+        hasViolation = true;
+        lastResult = `Bad Request (400): ${errorDetails}`;
+        continue; // Continue to the next chunk rather than returning immediately
+      }
+
+      if (!response.ok) {
+        // For other non-success status codes
+        if (response.status >= 500) { // Server errors
+          const errorDetails = await response.text();
+          reporter.verboseInfo(`        Llama Guard Server Error (${response.status}): ${errorDetails}`);
+          // For server errors, we should try to continue rather than marking as violation
+          // The error might be temporary, so we'll continue processing other chunks
+        } else {
+          // For other errors (like 401, 403, etc.), log them but continue processing
+          const errorDetails = await response.text();
+          reporter.verboseInfo(`        Llama Guard API Error (${response.status}): ${errorDetails}`);
+        }
+
+        continue; // Continue to the next chunk instead of returning
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        const errorResult = `Unexpected Llama Guard response format: ${reporter.jsonString(data)}`;
+        reporter.verboseInfo(`        ${errorResult}`);
+        return { hasViolation: true, result: `API Format Error: ${errorResult}` };
+      }
+
+      const result = data.choices[0]?.message?.content?.trim() || '';
+      lastResult = result;
+      reporter.verboseInfo(`        Llama Guard API Result [chunk ${i+1}/${contentChunks.length}]:\n${result}`);
+
+      const isUnsafe = result.startsWith("UNSAFE");
+      if (isUnsafe) {
+        hasViolation = true;
+      }
+
+    } catch (error: any) {
+      reporter.error("Llama Guard API", error);
+      return { hasViolation: true, result: `Exception during API call: ${error.message || error}` };
+    }
+  }
+
+  return { hasViolation: hasViolation, result: hasViolation ? lastResult : "SAFE" };
 }
 
 // Define TypeScript interface for the response (matches server API response)
