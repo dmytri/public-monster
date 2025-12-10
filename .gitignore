@@ -36,4 +36,5 @@ pnpm-debug.log*
 *.pid.lock
 .aider*
 .qwen
-!moderation
+
+\!*
