@@ -14,6 +14,8 @@ const argsConfig = {
   'shield': { type: 'boolean' },
   'safeguard': { type: 'boolean' },
   'guard': { type: 'boolean' },
+  'explain': { type: 'boolean' },
+  'no-cache': { type: 'boolean' },
   'console-depth': { type: 'string' }
 };
 
@@ -34,6 +36,8 @@ Options:
   --shield            Only run Arachnid Shield scans (images, videos, archives)
   --safeguard         Only run GPT-OSS-Safeguard scans (text-based files)
   --guard             Only run Llama Guard scans (text files and images)
+  --explain           Run explanation scans using meta-llama/llama-4-maverick-17b-128e-instruct model for both text and images (via GROQ)
+  --no-cache          Ignore existing cache files but still create new ones (overrides default caching behavior)
   --console-depth     Set the depth for console object inspection (Bun runtime flag)
 
 Examples:
@@ -53,10 +57,11 @@ const { values: args } = parseArgs({ args: Bun.argv.slice(2), options: argsConfi
 
 // Determine which scans to run based on arguments
 // If no specific scan flags are given, run everything. Otherwise, only run the flags that are explicitly enabled.
-const anyScanFlags = args.shield || args.safeguard || args.guard;
+const anyScanFlags = args.shield || args.safeguard || args.guard || args.explain;
 const runShieldScan = !anyScanFlags || args.shield;
 const runSafeguardScan = !anyScanFlags || args.safeguard;
 const runLlamaGuardScan = !anyScanFlags || args.guard;
+const runExplainScan = args.explain;  // Only run if explicitly requested
 
 // Read environment variables
 const BUNNY_API_KEY = process.env.BUNNY_API_KEY;
@@ -634,7 +639,9 @@ interface ScannerHandler {
 class SafeguardHandler implements ScannerHandler {
   async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
     const hasViolation = await moderateContentWithSafeguard(content, reporter);
-    return { hasViolation, result: hasViolation ? 'VIOLATION DETECTED' : 'SAFE' };
+    // Return a more detailed result for caching
+    const result = hasViolation ? 'VIOLATION DETECTED' : 'SAFE';
+    return { hasViolation, result };
   }
 
   getCacheKey(content: string, isImageUrl: boolean): string {
@@ -677,7 +684,8 @@ class ShieldHandler implements ScannerHandler {
       result = `Error: ${scanResult.data}`;
     }
 
-    return { hasViolation, result };
+    // Return the full scan result for caching
+    return { hasViolation, result: reporter.jsonString(scanResult) };
   }
 
   getCacheKey(url: string, isImageUrl: boolean): string {
@@ -686,44 +694,171 @@ class ShieldHandler implements ScannerHandler {
   }
 }
 
+class ExplainHandler implements ScannerHandler {
+  async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+    const result = await explainContentWithGROQ(content, isImageUrl, reporter);
+    // For explanation, we don't have violations in the traditional sense,
+    // we're just providing summaries, so return hasViolation: false
+    return { hasViolation: false, result: result.result };
+  }
+
+  getCacheKey(content: string, isImageUrl: boolean): string {
+    // For Explain, cache based on content or URL
+    return computeContentHash(content);
+  }
+}
+
 // Generic scanning function that can work with any scanner
-async function genericScan(scannerHandler: ScannerHandler, content: string, isImageUrl: boolean, cacheType: string, reporter: any): Promise<boolean> {
+async function genericScan(scannerHandler: ScannerHandler, content: string, isImageUrl: boolean, cacheType: string, fileLocation: string, reporter: any, useCache: boolean = true): Promise<{ hasViolation: boolean, result: string }> {
   // Get the cache key using the scanner's specific method
   const cacheKey = scannerHandler.getCacheKey(content, isImageUrl);
 
-  // Check if this content has already been scanned and found safe
-  if (checkCachedScan(cacheKey, cacheType)) {
-    reporter.info(`  ${isImageUrl ? 'Image URL' : 'File content'}: ${cacheType.toUpperCase()} OK (cached)`);
-    return false; // No violation found in cache
+  // Check if this content has already been scanned (only if cache is enabled)
+  if (useCache && checkCachedScan(cacheKey, cacheType)) {
+    // Read cached response
+    const cachedResponse = await readCachedResponse(cacheKey, cacheType);
+
+    reporter.info(`  ${fileLocation}: ${cacheType.toUpperCase()} OK (cached)`);
+
+    // If verbose mode is enabled, show the cached response
+    if (reporter.verbose) {
+      reporter.verboseInfo(`        Cached ${cacheType.toUpperCase()} Response:\n${cachedResponse || ''}`);
+    }
+
+    // For cached results, return false for hasViolation and the cached response
+    return { hasViolation: false, result: cachedResponse || 'SAFE (cached)' };
   }
 
   // Perform the scan using the specific scanner handler
   const scanResult = await scannerHandler.scan(content, isImageUrl, reporter);
 
   if (scanResult.hasViolation) {
-    reporter.violation(isImageUrl ? 'Image URL' : 'File content', cacheType.toUpperCase(), scanResult.result);
+    reporter.violation(fileLocation, cacheType.toUpperCase(), scanResult.result);
   } else {
-    reporter.ok(isImageUrl ? 'Image URL' : 'File content', cacheType.toUpperCase());
-    // Save to cache since the content is safe
-    saveScanToCache(cacheKey, cacheType);
+    reporter.ok(fileLocation, cacheType.toUpperCase());
   }
 
-  return scanResult.hasViolation;
+  // Save to cache with the full response
+  // Regardless of useCache flag, when we perform a scan, we save the result to update the cache
+  // This ensures that in no-cache mode, new results replace old cached results
+  saveScanToCache(cacheKey, cacheType, scanResult.result);
+
+  return { hasViolation: scanResult.hasViolation, result: scanResult.result };
+}
+
+// Function to explain content using appropriate models via GROQ API
+async function explainContentWithGROQ(content: string, isImageUrl: boolean, reporter: any): Promise<{ hasViolation: boolean, result: string }> {
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY environment variable is required for explain functionality");
+  }
+
+  const model = "meta-llama/llama-4-scout-17b-16e-instruct";
+
+  // Prepare the content for the API request
+  // If it's an image, we'll send the URL. If it's text, we'll send the content.
+  let messages: any[];
+  if (isImageUrl) {
+    // For images, send a message requesting an explanation of the image
+    messages = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "In 20 words or less, describe and classify this image using standard movie-style parental guidance."
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: content
+            }
+          }
+        ]
+      }
+    ];
+  } else {
+    // For text, extract ONLY the text content without HTML tags using a more aggressive approach
+    // First remove script and style elements completely
+    let cleanedContent = content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ');
+    cleanedContent = cleanedContent.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ');
+
+    // Then extract only text between HTML tags
+    let textContent = cleanedContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // Clean up common HTML artifacts
+    textContent = textContent.replace(/<!DOCTYPE[^>]*>/gi, ' ').replace(/\s+/g, ' ').trim();
+
+    // Shorten content if too long
+    if (textContent.length > 2000) {
+      textContent = textContent.substring(0, 2000);
+    }
+
+    messages = [
+      {
+        role: "user",
+        content: `In 20 words or less, describe as consicely as possible\n\nCONTENT:\n\`\`\`${textContent}\`\`\``
+      }
+    ];
+  }
+
+  const requestBody = {
+    model: model,
+    messages: messages,
+    temperature: 0.7,
+    max_tokens: 1000,
+    top_p: 1,
+    stream: false,
+    stop: null,
+  };
+
+  reporter.verboseInfo(`        Calling GROQ API for explanation with model: ${model} (isImageUrl: ${isImageUrl})`);
+
+  const response = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (response.status !== 200) {
+    reporter.verboseInfo(`        GROQ Explanation API Response: status=${response.status}`);
+  }
+
+  if (!response.ok) {
+    const errorResult = `Request failed with status ${response.status}: ${await response.text()}`;
+    reporter.error("GROQ Explanation API", errorResult);
+    return { hasViolation: true, result: `API Error: ${errorResult}` };
+  }
+
+  const data = await response.json();
+
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    const errorResult = `Unexpected GROQ Explanation response format: ${reporter.jsonString(data)}`;
+    reporter.verboseInfo(`        ${errorResult}`);
+    return { hasViolation: true, result: `API Format Error: ${errorResult}` };
+  }
+
+  const explanation = data.choices[0]?.message?.content?.trim() || '';
+  reporter.verboseInfo(`        GROQ Explanation API Result:\n${explanation}`);
+
+  return { hasViolation: false, result: explanation };
 }
 
 // Function to scan an image with Arachnid Shield SDK using URL
 async function scanImageWithArachnidShieldFromUrl(fileUrl: string, reporter: any): Promise<any> {
-  const shieldHandler = new ShieldHandler();
-  const result = await genericScan(shieldHandler, fileUrl, true, 'shield', reporter);
+  // Create an instance of ArachnidShield with the API credentials
+  // Using default base URL for Arachnid Shield
+  const shield = new ArachnidShield(ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD);
 
-  // Return in the original format for compatibility
-  // The generic scan returns a boolean (violation status),
-  // but the original function returned the raw API response
-  // For compatibility, we'll return a simplified response
-  return {
-    status: result ? 'ok' : 'ok',
-    data: result ? { is_match: true } : { is_match: false }
-  };
+  // Perform the scan using the SDK
+  reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${fileUrl}`);
+  const scanResult = await shield.scanMediaFromUrl(fileUrl);
+  reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(scanResult)}`);
+
+  return scanResult;
 }
 
 // Function to build a properly encoded URL for a file path
@@ -753,7 +888,7 @@ function checkCachedScan(hash: string, model: string): boolean {
 }
 
 // Function to save a scan result to cache
-function saveScanToCache(hash: string, model: string): void {
+function saveScanToCache(hash: string, model: string, response: string = ""): void {
   const cacheDir = `!moderation/.cache/`;
   const cacheFilePath = join(cacheDir, `${hash}.${model}`);
 
@@ -762,15 +897,84 @@ function saveScanToCache(hash: string, model: string): void {
     mkdirSync(cacheDir, { recursive: true });
   }
 
-  // Create an empty file to mark this content as safe for this model
-  Bun.write(cacheFilePath, "");
+  // Save the API response to the cache file
+  Bun.write(cacheFilePath, response);
 }
 
-// Function to fetch file content from Bunny storage using the storage API
-async function fetchFileContent(objectName: string): Promise<string> {
-  try {
+// Function to read a cached response
+async function readCachedResponse(hash: string, model: string): Promise<string | null> {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.${model}`);
+
+  if (existsSync(cacheFilePath)) {
+    return await Bun.file(cacheFilePath).text();
+  }
+
+  return null;
+}
+
+// Function to save file data to cache
+function saveFileDataToCache(hash: string, data: string): void {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.data`);
+
+  // Ensure the cache directory exists
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+
+  // Save the file data to the cache file
+  Bun.write(cacheFilePath, data);
+}
+
+// Function to read cached file data
+async function readCachedFileData(hash: string): Promise<string | null> {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.data`);
+
+  if (existsSync(cacheFilePath)) {
+    return await Bun.file(cacheFilePath).text();
+  }
+
+  return null;
+}
+
+// Function to save ETag to cache
+function saveEtagToCache(hash: string, etag: string): void {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.etag`);
+
+  // Ensure the cache directory exists
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+
+  // Save the ETag to the cache file
+  Bun.write(cacheFilePath, etag);
+}
+
+// Function to read cached ETag
+async function readCachedEtag(hash: string): Promise<string | null> {
+  const cacheDir = `!moderation/.cache/`;
+  const cacheFilePath = join(cacheDir, `${hash}.etag`);
+
+  if (existsSync(cacheFilePath)) {
+    return await Bun.file(cacheFilePath).text();
+  }
+
+  return null;
+}
+
+// Function to fetch file content from Bunny storage using the storage API with ETag-based caching
+async function fetchFileContent(objectName: string, noCache: boolean = false): Promise<string> {
+  // Use the file path for hashing instead of content
+  const contentHash = computeContentHash(objectName);
+
+  // If no-cache is specified, skip using the cache
+  if (noCache) {
     // Use the storage API directly instead of the pull zone to avoid URL encoding issues
     const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
+
     const response = await fetch(storageUrl, {
       headers: {
         AccessKey: BUNNY_API_KEY
@@ -780,11 +984,153 @@ async function fetchFileContent(objectName: string): Promise<string> {
     if (!response.ok) {
       throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
     }
-    return await response.text();
-  } catch (error) {
-    console.error(`Error fetching file content from ${BUNNY_STORAGE_URL}${objectName} via storage API:`, error);
-    throw error;
+
+    // Get the response content
+    const content = await response.text();
+
+    // Check if the response includes a new ETag and save it to cache
+    const newEtag = response.headers.get('etag');
+    if (newEtag) {
+      // Save the new ETag and content to cache, overwriting any existing cache
+      saveEtagToCache(contentHash, newEtag);
+      saveFileDataToCache(contentHash, content);
+    }
+
+    return content;
   }
+
+  // Try to get cached etag and data
+  const cachedEtag = await readCachedEtag(contentHash);
+  const cachedData = await readCachedFileData(contentHash);
+
+  // Use the storage API directly instead of the pull zone to avoid URL encoding issues
+  const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
+
+  // Prepare request headers
+  const headers: any = {
+    AccessKey: BUNNY_API_KEY
+  };
+
+  // If we have a cached ETag, add it to the request headers for conditional request
+  if (cachedEtag) {
+    headers['If-None-Match'] = cachedEtag;
+  }
+
+  const response = await fetch(storageUrl, {
+    headers: headers
+  });
+
+  if (response.status === 304) {
+    // File hasn't changed, return cached data
+    if (cachedData !== null) {
+      return cachedData;
+    } else {
+      // This shouldn't happen if we have an ETag, but handle gracefully
+      throw new Error('Received 304 but no cached data found');
+    }
+  } else if (!response.ok) {
+    throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
+  }
+
+  // Get the response content
+  const content = await response.text();
+
+  // Check if the response includes a new ETag
+  const newEtag = response.headers.get('etag');
+  if (newEtag) {
+    // Save the new ETag and content to cache
+    saveEtagToCache(contentHash, newEtag);
+    saveFileDataToCache(contentHash, content);
+  }
+
+  return content;
+}
+
+// Function to fetch file content and etag from Bunny storage using the storage API
+async function fetchFileContentWithEtag(objectName: string, reporter: any, noCache: boolean = false): Promise<{content: string, etag: string | null}> {
+  // Use the file path for hashing instead of content
+  const contentHash = computeContentHash(objectName);
+
+  // If no-cache is specified, skip using the cache
+  if (noCache) {
+    // Use the storage API directly instead of the pull zone to avoid URL encoding issues
+    const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
+
+    const response = await fetch(storageUrl, {
+      headers: {
+        AccessKey: BUNNY_API_KEY
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
+    }
+
+    // Get the response content
+    const content = await response.text();
+
+    // Check if the response includes a new ETag
+    const newEtag = response.headers.get('etag');
+    if (newEtag) {
+      // Display the new ETag
+      reporter.info(`  ${objectName}: ETag: ${newEtag}`);
+
+      // Save the new ETag and content to cache, overwriting any existing cache
+      saveEtagToCache(contentHash, newEtag);
+      saveFileDataToCache(contentHash, content);
+    }
+
+    return { content, etag: newEtag };
+  }
+
+  // Try to get cached etag and data
+  const cachedEtag = await readCachedEtag(contentHash);
+  const cachedData = await readCachedFileData(contentHash);
+
+  // Use the storage API directly instead of the pull zone to avoid URL encoding issues
+  const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
+
+  // Prepare request headers
+  const headers: any = {
+    AccessKey: BUNNY_API_KEY
+  };
+
+  // If we have a cached ETag, add it to the request headers for conditional request
+  if (cachedEtag) {
+    headers['If-None-Match'] = cachedEtag;
+  }
+
+  const response = await fetch(storageUrl, {
+    headers: headers
+  });
+
+  if (response.status === 304) {
+    // File hasn't changed, return cached data
+    if (cachedData !== null) {
+      return { content: cachedData, etag: cachedEtag };
+    } else {
+      // This shouldn't happen if we have an ETag, but handle gracefully
+      throw new Error('Received 304 but no cached data found');
+    }
+  } else if (!response.ok) {
+    throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
+  }
+
+  // Get the response content
+  const content = await response.text();
+
+  // Check if the response includes a new ETag
+  const newEtag = response.headers.get('etag');
+  if (newEtag) {
+    // Display the new ETag
+    reporter.info(`  ${objectName}: ETag: ${newEtag}`);
+
+    // Save the new ETag and content to cache
+    saveEtagToCache(contentHash, newEtag);
+    saveFileDataToCache(contentHash, content);
+  }
+
+  return { content, etag: newEtag };
 }
 
 
@@ -1223,11 +1569,11 @@ Examples:
           const file = groqFiles[i];
 
           try {
-            const fileContent = await fetchFileContent(file.ObjectName);
+            const { content: fileContent, etag } = await fetchFileContentWithEtag(file.ObjectName, userReporter, args['no-cache']);
 
             // Use the generic scanning function with Safeguard handler
             const safeguardHandler = new SafeguardHandler();
-            await genericScan(safeguardHandler, fileContent, false, 'safeguard', userReporter);
+            await genericScan(safeguardHandler, fileContent, false, 'safeguard', file.ObjectName, userReporter, !args['no-cache']);
 
             // Add a delay between file processing to avoid rate limiting
             if (i < groqFiles.length - 1) {
@@ -1257,12 +1603,13 @@ Examples:
             if (isImageUrl) {
               contentForLlamaGuard = buildFileUrl(file.ObjectName); // For images, pass the URL
             } else {
-              contentForLlamaGuard = await fetchFileContent(file.ObjectName); // For text, fetch content
+              const { content, etag } = await fetchFileContentWithEtag(file.ObjectName, userReporter, args['no-cache']); // For text, fetch content
+              contentForLlamaGuard = content;
             }
 
             // Use the generic scanning function with Guard handler
             const guardHandler = new GuardHandler();
-            await genericScan(guardHandler, contentForLlamaGuard, isImageUrl, 'guard', userReporter);
+            await genericScan(guardHandler, contentForLlamaGuard, isImageUrl, 'guard', file.ObjectName, userReporter, !args['no-cache']);
 
             // Add a delay between file processing to avoid rate limiting
             if (i < llamaGuardFiles.length - 1) {
@@ -1276,6 +1623,48 @@ Examples:
         userReporter.info("    No text or image files found for Llama Guard");
       }
 
+      // Scan files with Explain functionality
+      if (runExplainScan && llamaGuardFiles.length > 0) {
+        userReporter.info(`    Text and image files found for explanation: ${llamaGuardFiles.length}`);
+
+        for (let i = 0; i < llamaGuardFiles.length; i++) {
+          const file = llamaGuardFiles[i];
+
+          // Determine if the file is an image based on its extension
+          const isImageUrl = shieldExtensions.some(ext => file.ObjectName.toLowerCase().endsWith(ext));
+
+          try {
+            let contentForExplain: string;
+
+            if (isImageUrl) {
+              contentForExplain = buildFileUrl(file.ObjectName); // For images, pass the URL
+            } else {
+              const { content, etag } = await fetchFileContentWithEtag(file.ObjectName, userReporter, args['no-cache']); // For text, fetch content
+              contentForExplain = content;
+            }
+
+            // Use the generic scanning function with Explain handler
+            const explainHandler = new ExplainHandler();
+            const scanResult = await genericScan(explainHandler, contentForExplain, isImageUrl, 'explain', file.ObjectName, userReporter, !args['no-cache']);
+
+            if (scanResult.hasViolation) {
+              userReporter.error(file.ObjectName, scanResult.result);
+            } else {
+              userReporter.info(`  Explanation for ${file.ObjectName}:\n${scanResult.result}`);
+            }
+
+            // Add a delay between file processing to avoid rate limiting
+            if (i < llamaGuardFiles.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+            }
+          } catch (error) {
+            userReporter.error(file.ObjectName, error);
+          }
+        }
+      } else if (runExplainScan) {
+        userReporter.info("    No text or image files found for explanation");
+      }
+
       // Scan files with Arachnid Shield
       if (runShieldScan && shieldFiles.length > 0) {
         userReporter.info(`    Media files found: ${shieldFiles.length}`);
@@ -1285,9 +1674,33 @@ Examples:
             // Build the file URL using the buildFileUrl function to handle special characters
             const fileUrl = buildFileUrl(shieldFile.ObjectName);
 
-            // Use the generic scanning function with Shield handler
-            const shieldHandler = new ShieldHandler();
-            await genericScan(shieldHandler, fileUrl, true, 'shield', userReporter);
+            // For Arachnid Shield, we use URL-based hashing for the cache instead of content-based hashing
+            const urlHash = computeContentHash(fileUrl);
+
+            // Check if this URL has already been scanned and found safe by Arachnid Shield (only if cache is enabled)
+            if (!args['no-cache'] && checkCachedScan(urlHash, 'shield')) {
+              userReporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
+
+              // If verbose mode is enabled, show the cached response
+              const cachedResponse = await readCachedResponse(urlHash, 'shield');
+              if (userReporter.verbose && cachedResponse) {
+                userReporter.verboseInfo(`        Cached ARACHNID SHIELD Response:\n${cachedResponse}`);
+              }
+              continue; // Skip scanning since it's already been checked and found safe
+            }
+
+            const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, userReporter);
+
+            if (scanResult.status === 'ok' && scanResult.data.is_match) {
+              const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
+              userReporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
+            } else if (scanResult.status === 'ok') {
+              userReporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
+              // Save the full API response to cache since the content is safe
+              saveScanToCache(urlHash, 'shield', JSON.stringify(scanResult));
+            } else { // status is 'err' (already handled by catch, but good for explicit logic)
+              userReporter.error(shieldFile.ObjectName, scanResult.data);
+            }
           } catch (error) {
             userReporter.error(shieldFile.ObjectName, error);
           }
