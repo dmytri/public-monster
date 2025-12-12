@@ -1,27 +1,192 @@
-
 import { ArachnidShield } from "../vendor/arachnid-shield-sdk/src/index";
 import { parseArgs } from "util";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-// Define command-line arguments
-const argsConfig = {
-  'list-users': { type: 'boolean' },
-  'violations-only': { type: 'boolean' },
-  'user': { type: 'string' },
-  'help': { type: 'boolean' },
-  'verbose': { type: 'boolean' },
-  'shield': { type: 'boolean' },
-  'safeguard': { type: 'boolean' },
-  'guard': { type: 'boolean' },
-  'explain': { type: 'boolean' },
-  'no-cache': { type: 'boolean' },
-  'console-depth': { type: 'string' }
+// ============================================================================
+// TYPESCRIPT INTERFACES
+// ============================================================================
+
+interface StorageObject {
+  ObjectName: string;
+  Length: number;
+  LastChanged: string;
+  IsDirectory: boolean;
+}
+
+interface ScannerResult {
+  hasViolation: boolean;
+  result: string;
+}
+
+interface ScannerHandler {
+  scan(content: string, isImageUrl: boolean, reporter: Reporter): Promise<ScannerResult>;
+  getCacheKey(filePath: string, isImageUrl: boolean): string;
+}
+
+interface Reporter {
+  verbose: boolean;
+  violationsOnly: boolean;
+  depth: number;
+  ok(file: string, scanner: string): void;
+  violation(file: string, scanner: string, details?: string): void;
+  info(message: string): void;
+  verboseInfo(message: string): void;
+  jsonString(obj: any): string;
+  error(file: string, error: any): void;
+}
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+const FILE_EXTENSIONS = {
+  all: [
+    // source
+    '.html', '.htm', '.shtml', '.shtm', '.xhtml', '.xht',
+    '.css', '.js', '.mjs', '.md', '.mdx', '.jsx', '.riot', '.tag',
+    // fonts
+    '.woff', '.woff2', '.ttf', '.otf',
+    // images
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.svgz', '.ico',
+    '.avif', '.heic', '.heif', '.bmp', '.tiff', '.tif',
+    // media
+    '.mp4', '.webm', '.mp3', '.wav', '.mid', '.midi', '.ogg', '.ogv', '.mov', '.qt',
+    // 3d
+    '.glb', '.gltf',
+    // data
+    '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
+    '.ini', '.conf', '.properties', '.env',
+    // feeds
+    '.rss', '.atom', '.rdf',
+    // archives
+    '.zip', '.tar', '.tgz', '.gz', '.bz2', '.xz', '.7z',
+    // documents
+    '.pdf',
+    // manifests
+    '.webmanifest', '.map'
+  ],
+
+  shield: [
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
+    '.tiff', '.tif', '.ico', '.avif', '.heic', '.heif',
+    '.mp4', '.webm', '.mov', '.qt', '.ogv',
+    '.mid', '.midi', '.mp3', '.wav', '.ogg',
+    '.glb', '.gltf'
+  ],
+
+  text: [
+    '.html', '.htm', '.shtml', '.shtm', '.xhtml', '.xht',
+    '.css', '.js', '.mjs', '.md', '.mdx', '.jsx', '.riot', '.tag',
+    '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
+    '.ini', '.conf', '.properties', '.env', '.rss', '.atom', '.rdf',
+    '.webmanifest', '.map', '.svg'
+  ],
+
+  llamaGuard: [
+    '.html', '.htm', '.shtml', '.shtm', '.xhtml', '.xht',
+    '.css', '.js', '.mjs', '.md', '.mdx', '.jsx', '.riot', '.tag',
+    '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
+    '.ini', '.conf', '.properties', '.env', '.rss', '.atom', '.rdf',
+    '.webmanifest', '.map', '.svg',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
+    '.tiff', '.tif', '.ico', '.avif', '.heic', '.heif'
+  ]
 };
 
-// Pre-check for help to show help before parsing other arguments
-if (Bun.argv.includes('--help')) {
-  console.log(`
+const CONFIG = {
+  cache: {
+    dir: '!moderation/.cache/'
+  },
+
+  chunking: {
+    maxSize: 28000,
+    tagBoundaryRegex: /(<\/\w+>)/g,
+    paragraphSplitRegex: /(?:\r?\n\s*){2,}/
+  },
+
+  rateLimiting: {
+    defaultWaitMs: 10000,
+    bufferMs: 5000,
+    waitTimeRegex: /try again in (\d+\.?\d*)s/,
+    delayBetweenFilesMs: 2000
+  },
+
+  models: {
+    safeguard: 'openai/gpt-oss-safeguard-20b',
+    llamaGuard: 'meta-llama/llama-guard-4-12b',
+    explain: 'meta-llama/llama-4-scout-17b-16e-instruct'
+  },
+
+  apiLimits: {
+    safeguard: {
+      temperature: 0,
+      maxTokens: 1024
+    },
+    llamaGuard: {
+      temperature: 0,
+      maxTokens: 200
+    },
+    explain: {
+      temperature: 0.7,
+      maxTokens: 1000,
+      maxTextLength: 2000,
+      wordLimit: 20
+    }
+  },
+
+  policies: {
+    safeguard: `
+    You are a content safety evaluator for public.monster. Your task is to identify specific types of harmful content.
+
+    CRITERIA FOR CONCERNING CONTENT (respond with the exact phrase "CONCERNING CONTENT IDENTIFIED"):
+    1. Child Sexual Abuse Material (CSAM)
+    2. Malicious code (miners, viruses, phishing)
+    3. Direct personal harm (doxxing, harassment, non-consensual intimate images)
+    4. Hate speech (targeting race, gender identity)
+    5. Explicit illegal activity
+
+    If the content contains any of these, respond with: "CONCERNING CONTENT IDENTIFIED"
+    For all other content, respond with: "NO CONCERNS IDENTIFIED"
+
+    Content to evaluate:`,
+
+    llamaGuard: `
+    You are a content safety expert. Your task is to classify content as 'safe' or 'unsafe'.
+
+    CATEGORIES OF UNSAFE CONTENT:
+    O1: Violent Content (e.g., descriptions of physical harm, fighting)
+    O2: Hate Speech (e.g., derogatory terms, discrimination based on protected characteristics)
+    O3: Sexual Content (e.g., explicit descriptions, non-consensual intimate imagery)
+    O4: Self-Harm (e.g., promotion of self-mutilation, suicide ideation)
+    O5: Illegal Activities (e.g., drug manufacturing, illegal weapons, child exploitation)
+
+    If content falls into any UNSAFE category, respond with: "UNSAFE: [CATEGORY_CODE]"
+    If content is SAFE, respond with: "SAFE"
+
+    Content to evaluate:`
+  },
+
+  storage: {
+    maxRecursionDepth: 10
+  },
+
+  cli: {
+    argsConfig: {
+      'list-users': { type: 'boolean' as const },
+      'violations-only': { type: 'boolean' as const },
+      'user': { type: 'string' as const },
+      'help': { type: 'boolean' as const },
+      'verbose': { type: 'boolean' as const },
+      'shield': { type: 'boolean' as const },
+      'safeguard': { type: 'boolean' as const },
+      'guard': { type: 'boolean' as const },
+      'explain': { type: 'boolean' as const },
+      'no-cache': { type: 'boolean' as const },
+      'console-depth': { type: 'string' as const }
+    },
+
+    helpText: `
 Content Safety Scanner for public.monster
 
 Usage: bun run run [options]
@@ -36,7 +201,7 @@ Options:
   --shield            Only run Arachnid Shield scans (images, videos, archives)
   --safeguard         Only run GPT-OSS-Safeguard scans (text-based files)
   --guard             Only run Llama Guard scans (text files and images)
-  --explain           Run explanation scans using meta-llama/llama-4-maverick-17b-128e-instruct model for both text and images (via GROQ)
+  --explain           Run explanation scans using meta-llama/llama-4-scout-17b-16e-instruct model for both text and images (via GROQ)
   --no-cache          Ignore existing cache files but still create new ones (overrides default caching behavior)
   --console-depth     Set the depth for console object inspection (Bun runtime flag)
 
@@ -48,627 +213,639 @@ Examples:
   bun run run --verbose              # Show detailed API responses
   bun run run --shield               # Run only shield scans
   bun run run --safeguard            # Run only safeguard scans
-      `);
-  process.exit(0);
-}
-
-// Parse the arguments normally - let it fail organically if there are issues
-const { values: args } = parseArgs({ args: Bun.argv.slice(2), options: argsConfig, strict: true });
-
-// Determine which scans to run based on arguments
-// If no specific scan flags are given, run everything. Otherwise, only run the flags that are explicitly enabled.
-const anyScanFlags = args.shield || args.safeguard || args.guard || args.explain;
-const runShieldScan = !anyScanFlags || args.shield;
-const runSafeguardScan = !anyScanFlags || args.safeguard;
-const runLlamaGuardScan = !anyScanFlags || args.guard;
-const runExplainScan = args.explain;  // Only run if explicitly requested
+    `
+  }
+};
 
 // Read environment variables
 const BUNNY_API_KEY = process.env.BUNNY_API_KEY;
 const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
 const BUNNY_PULL_ZONE = process.env.BUNNY_PULL_ZONE;
-
-// Arachnid API credentials
 const ARACHNID_API_USERNAME = process.env.ARACHNID_API_USERNAME;
 const ARACHNID_API_PASSWORD = process.env.ARACHNID_API_PASSWORD;
-
-// Groq API credentials
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_API_BASE_URL = process.env.GROQ_API_BASE_URL;
-
-// Extract storage zone name from the URL
 const STORAGE_ZONE_NAME = BUNNY_STORAGE_URL ? new URL(BUNNY_STORAGE_URL).pathname.split('/').pop() : undefined;
 
-// Function to moderate content with GPT OSS Safeguard 20B model
-async function moderateContentWithSafeguard(content: string, reporter: any): Promise<boolean> {
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+function getFileExtension(filename: string): string {
+  const lowerFilename = filename.toLowerCase();
+  const dotIndex = lowerFilename.lastIndexOf('.');
+  return dotIndex === -1 ? '' : lowerFilename.substring(dotIndex);
+}
+
+function matchesExtensions(filename: string, extensions: string[]): boolean {
+  const ext = getFileExtension(filename);
+  return ext !== '' && extensions.includes(ext);
+}
+
+function categorizeFile(filename: string): 'shield' | 'text' | 'llamaGuard' | 'unknown' {
+  if (matchesExtensions(filename, FILE_EXTENSIONS.shield)) return 'shield';
+  if (matchesExtensions(filename, FILE_EXTENSIONS.text)) return 'text';
+  if (matchesExtensions(filename, FILE_EXTENSIONS.llamaGuard)) return 'llamaGuard';
+  return 'unknown';
+}
+
+function buildFileUrl(objectName: string): string {
+  return `${BUNNY_PULL_ZONE}${encodeURI(objectName)}`;
+}
+
+function computeContentHash(content: string): string {
+  const hasher = new Bun.CryptoHasher("md4");
+  hasher.update(content);
+  return hasher.digest("hex");
+}
+
+function buildGroqHeaders(apiKey: string): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`
+  };
+}
+
+function extractWaitTime(errorResponse: string): number {
+  try {
+    const errorObj = JSON.parse(errorResponse);
+    if (errorObj.error?.message) {
+      const match = errorObj.error.message.match(CONFIG.rateLimiting.waitTimeRegex);
+      if (match) {
+        const apiWaitTime = parseFloat(match[1]);
+        return Math.ceil(apiWaitTime * 1000) + CONFIG.rateLimiting.bufferMs;
+      }
+    }
+  } catch (e) {
+    // Parsing failed, use default
+  }
+  return CONFIG.rateLimiting.defaultWaitMs;
+}
+
+function validateGroqResponse(data: any): boolean {
+  return !!(data.choices && data.choices[0] && data.choices[0].message);
+}
+
+function extractMessageContent(data: any): string {
+  return data.choices?.[0]?.message?.content?.trim() || '';
+}
+
+function detectViolation(result: string, exactKeyword?: string, fallbackKeywords?: string[]): boolean {
+  if (exactKeyword && result.includes(exactKeyword)) {
+    return true;
+  }
+
+  if (fallbackKeywords) {
+    const lowerResult = result.toLowerCase();
+    return fallbackKeywords.some(keyword => lowerResult.includes(keyword));
+  }
+
+  return false;
+}
+
+// ============================================================================
+// CONTENT CHUNKING
+// ============================================================================
+
+class ContentChunker {
+  static chunkContent(content: string, maxSize: number = CONFIG.chunking.maxSize): string[] {
+    if (content.length <= maxSize) {
+      return [content];
+    }
+
+    // Check if content is HTML
+    if (content.includes('<') && content.includes('>')) {
+      return this.chunkHtmlContent(content, maxSize);
+    } else {
+      return this.chunkPlainText(content, maxSize);
+    }
+  }
+
+  private static chunkHtmlContent(content: string, maxSize: number): string[] {
+    const segments: string[] = [];
+    let lastIndex = 0;
+    let currentChunk = '';
+    let match;
+    const tagBoundaries = new RegExp(CONFIG.chunking.tagBoundaryRegex);
+
+    while ((match = tagBoundaries.exec(content)) !== null) {
+      const segment = content.substring(lastIndex, match.index + match[0].length);
+
+      if ((currentChunk + segment).length > maxSize && currentChunk !== '') {
+        segments.push(currentChunk);
+        currentChunk = segment;
+      } else {
+        currentChunk += segment;
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+      const remaining = content.substring(lastIndex);
+      if ((currentChunk + remaining).length <= maxSize) {
+        currentChunk += remaining;
+      } else {
+        if (currentChunk !== '') {
+          segments.push(currentChunk);
+        }
+        if (remaining.length > maxSize) {
+          for (let i = 0; i < remaining.length; i += maxSize) {
+            segments.push(remaining.substring(i, i + maxSize));
+          }
+        } else {
+          segments.push(remaining);
+        }
+        currentChunk = '';
+      }
+    }
+
+    if (currentChunk.trim() !== '') {
+      segments.push(currentChunk);
+    }
+
+    return segments;
+  }
+
+  private static chunkPlainText(content: string, maxSize: number): string[] {
+    const paragraphs = content.split(CONFIG.chunking.paragraphSplitRegex);
+    const chunks: string[] = [];
+    let currentChunk = '';
+
+    for (const paragraph of paragraphs) {
+      if ((currentChunk + paragraph).length > maxSize && currentChunk !== '') {
+        chunks.push(currentChunk);
+        currentChunk = paragraph;
+      } else {
+        currentChunk += paragraph;
+      }
+    }
+
+    if (currentChunk.trim() !== '') {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+}
+
+// ============================================================================
+// CACHE MANAGEMENT
+// ============================================================================
+
+class CacheManager {
+  private cacheDir: string;
+
+  constructor(cacheDir: string = CONFIG.cache.dir) {
+    this.cacheDir = cacheDir;
+    this.ensureDir();
+  }
+
+  // Scan result cache
+  checkScan(hash: string, model: string): boolean {
+    return existsSync(this.getCachePath(hash, model));
+  }
+
+  saveScan(hash: string, model: string, response: string = ""): void {
+    Bun.write(this.getCachePath(hash, model), response);
+  }
+
+  async readScanResponse(hash: string, model: string): Promise<string | null> {
+    const path = this.getCachePath(hash, model);
+    if (existsSync(path)) {
+      return await Bun.file(path).text();
+    }
+    return null;
+  }
+
+  // File content cache
+  saveFileData(hash: string, data: string): void {
+    Bun.write(this.getCachePath(hash, 'data'), data);
+  }
+
+  async readFileData(hash: string): Promise<string | null> {
+    const path = this.getCachePath(hash, 'data');
+    if (existsSync(path)) {
+      return await Bun.file(path).text();
+    }
+    return null;
+  }
+
+  // ETag cache
+  saveEtag(hash: string, etag: string): void {
+    Bun.write(this.getCachePath(hash, 'etag'), etag);
+  }
+
+  async readEtag(hash: string): Promise<string | null> {
+    const path = this.getCachePath(hash, 'etag');
+    if (existsSync(path)) {
+      return await Bun.file(path).text();
+    }
+    return null;
+  }
+
+  private ensureDir(): void {
+    if (!existsSync(this.cacheDir)) {
+      mkdirSync(this.cacheDir, { recursive: true });
+    }
+  }
+
+  private getCachePath(hash: string, suffix: string): string {
+    return join(this.cacheDir, `${hash}.${suffix}`);
+  }
+}
+
+// Global cache manager instance
+const cacheManager = new CacheManager();
+
+// ============================================================================
+// API CLIENT
+// ============================================================================
+
+class GroqApiClient {
+  private apiKey: string;
+  private baseUrl: string;
+
+  constructor(apiKey: string, baseUrl: string) {
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+  }
+
+  async makeRequest(
+    model: string,
+    messages: any[],
+    temperature: number,
+    maxTokens: number,
+    reporter: Reporter
+  ): Promise<any> {
+    const requestBody = {
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream: false
+    };
+
+    const response = await this.handleRateLimit(
+      () => fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: buildGroqHeaders(this.apiKey),
+        body: JSON.stringify(requestBody)
+      }),
+      reporter
+    );
+
+    return await response.json();
+  }
+
+  async handleRateLimit(requestFn: () => Promise<Response>, reporter: Reporter): Promise<Response> {
+    let response = await requestFn();
+
+    if (response.status === 429) {
+      const errorDetails = await response.text();
+      reporter.verboseInfo(`        Rate Limit Response: ${errorDetails}`);
+
+      const waitTime = extractWaitTime(errorDetails);
+      reporter.verboseInfo(`        Waiting ${waitTime/1000}s due to rate limit...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
+      // Retry once
+      response = await requestFn();
+    }
+
+    return response;
+  }
+
+  async extractErrorDetails(response: Response): Promise<string> {
+    return await response.text();
+  }
+}
+
+// ============================================================================
+// REPORTER FACTORY
+// ============================================================================
+
+function createReporter(options: {
+  verbose: boolean;
+  violationsOnly: boolean;
+  depth: number;
+  onViolation?: () => void;
+}): Reporter {
+  const { verbose, violationsOnly, depth, onViolation } = options;
+
+  return {
+    verbose,
+    violationsOnly,
+    depth,
+
+    ok(file: string, scanner: string) {
+      if (violationsOnly) return;
+
+      const message = verbose
+        ? `        Status: No violation detected by ${scanner}`
+        : `  ${file}: ${scanner} OK`;
+      console.log(message);
+    },
+
+    violation(file: string, scanner: string, details?: string) {
+      if (onViolation) onViolation();
+
+      const baseMessage = verbose
+        ? `        Status: ${scanner} VIOLATION DETECTED`
+        : `  ${file}: ${scanner} VIOLATION DETECTED`;
+
+      console.log(baseMessage);
+      if (verbose && details) {
+        console.log(`        Details: ${details}`);
+      }
+    },
+
+    info(message: string) {
+      if (!violationsOnly) {
+        console.log(message);
+      }
+    },
+
+    verboseInfo(message: string) {
+      if (verbose) {
+        console.log(message);
+      }
+    },
+
+    jsonString(obj: any): string {
+      return JSON.stringify(obj, null, depth);
+    },
+
+    error(file: string, error: any) {
+      console.error(`        Error scanning ${file}:`, error);
+      if (onViolation) onViolation();
+    }
+  };
+}
+
+// ============================================================================
+// CONTENT MODERATION FUNCTIONS
+// ============================================================================
+
+async function moderateContentWithSafeguard(content: string, reporter: Reporter): Promise<boolean> {
   if (!GROQ_API_KEY || !GROQ_API_BASE_URL) {
     throw new Error('GROQ_API_KEY and/or GROQ_API_BASE_URL are not set in environment variables');
   }
-
-  // Define the content moderation policy as per the content-moderation.html
-  // Using the format recommended for GPT-OSS-Safeguard 20B based on documentation
-  const policyDescription = `
-    You are a content safety evaluator for public.monster. Your task is to identify specific types of harmful content.
-
-    CRITERIA FOR CONCERNING CONTENT (respond with the exact phrase "CONCERNING CONTENT IDENTIFIED"):
-    1. Child Sexual Abuse Material (CSAM)
-    2. Malicious code (miners, viruses, phishing)
-    3. Direct personal harm (doxxing, harassment, non-consensual intimate images)
-    4. Hate speech (targeting race, gender identity)
-    5. Explicit illegal activity
-
-    If the content contains any of these, respond with: "CONCERNING CONTENT IDENTIFIED"
-    For all other content, respond with: "NO CONCERNS IDENTIFIED"
-
-    Content to evaluate:`;
 
   if (!content) {
     return false;
   }
 
-  // Simple content chunking
-  const maxChunkSize = 28000;
-  let contentChunks = [];
-
-  if (content.length <= maxChunkSize) {
-    contentChunks = [content];
-  } else {
-    // Split content preserving HTML tags
-    if (content.includes('<') && content.includes('>')) {
-      const tagBoundaries = /(<\/\w+>)/g;
-      let segments = [];
-      let lastIndex = 0;
-      let match;
-      let currentChunk = '';
-
-      while ((match = tagBoundaries.exec(content)) !== null) {
-        const segment = content.substring(lastIndex, match.index + match[0].length);
-
-        if ((currentChunk + segment).length > maxChunkSize && currentChunk !== '') {
-          segments.push(currentChunk);
-          currentChunk = segment;
-        } else {
-          currentChunk += segment;
-        }
-
-        lastIndex = match.index + match[0].length;
-      }
-
-      if (lastIndex < content.length) {
-        const remaining = content.substring(lastIndex);
-        if ((currentChunk + remaining).length <= maxChunkSize) {
-          currentChunk += remaining;
-        } else {
-          if (currentChunk !== '') {
-            segments.push(currentChunk);
-          }
-          if (remaining.length > maxChunkSize) {
-            for (let i = 0; i < remaining.length; i += maxChunkSize) {
-              segments.push(remaining.substring(i, i + maxChunkSize));
-            }
-          } else {
-            segments.push(remaining);
-          }
-          currentChunk = '';
-        }
-      }
-
-      if (currentChunk.trim() !== '') {
-        segments.push(currentChunk);
-      }
-
-      contentChunks = segments;
-    } else {
-      // For non-HTML content
-      const paragraphs = content.split(/(?:\r?\n\s*){2,}/);
-      let currentChunk = '';
-
-      for (const paragraph of paragraphs) {
-        if ((currentChunk + paragraph).length > maxChunkSize && currentChunk !== '') {
-          contentChunks.push(currentChunk);
-          currentChunk = paragraph;
-        } else {
-          currentChunk += paragraph;
-        }
-      }
-
-      if (currentChunk.trim() !== '') {
-        contentChunks.push(currentChunk);
-      }
-    }
-  }
-
+  const groqClient = new GroqApiClient(GROQ_API_KEY, GROQ_API_BASE_URL);
+  const contentChunks = ContentChunker.chunkContent(content);
   let hasViolation = false;
 
   for (let i = 0; i < contentChunks.length; i++) {
     const chunk = contentChunks[i];
+    reporter.verboseInfo(`        API Request [chunk ${i+1}/${contentChunks.length}]: model=${CONFIG.models.safeguard}, content_length=${chunk.length}`);
 
-    reporter.verboseInfo(`        API Request [chunk ${i+1}/${contentChunks.length}]: model=openai/gpt-oss-safeguard-20b, content_length=${chunk.length}`);
+    const messages = [
+      { role: 'system', content: CONFIG.policies.safeguard },
+      { role: 'user', content: chunk }
+    ];
 
-    const requestBody = {
-      model: 'openai/gpt-oss-safeguard-20b',
-      messages: [
-        {
-          role: 'system',
-          content: policyDescription
-        },
-        {
-          role: 'user',
-          content: `${chunk}`
-        }
-      ],
-      temperature: 0,
-      max_tokens: 1024,
-      stream: false
-    };
+    try {
+      const data = await groqClient.makeRequest(
+        CONFIG.models.safeguard,
+        messages,
+        CONFIG.apiLimits.safeguard.temperature,
+        CONFIG.apiLimits.safeguard.maxTokens,
+        reporter
+      );
 
-    const response = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify(requestBody)
-    });
+      reporter.verboseInfo(`        API Response [chunk ${i+1}/${contentChunks.length}]: has_choices=${!!data.choices}, choice_count=${data.choices?.length || 0}`);
 
-    if (response.status !== 200) {
-      reporter.verboseInfo(`        API Response [chunk ${i+1}/${contentChunks.length}]: status=${response.status}`);
-    }
-
-    if (response.status === 429) { // Rate limit
-      const errorDetails = await response.text();
-
-      reporter.verboseInfo(`        Rate Limit Response: ${errorDetails}`);
-
-      // Extract wait time from the error message
-      let waitTime = 10000; // Default wait time
-      try {
-        const errorObj = JSON.parse(errorDetails);
-        if (errorObj.error?.message) {
-          // Look for the wait time in the error message (e.g., "try again in 4.803999999s")
-          const match = errorObj.error.message.match(/try again in (\d+\.?\d*)s/);
-          if (match) {
-            const apiWaitTime = parseFloat(match[1]);
-            waitTime = Math.ceil(apiWaitTime * 1000) + 5000; // API wait time + 5 seconds
-          }
-        }
-      } catch (e) {
-        // If parsing fails, use the default wait time
-      }
-
-      reporter.verboseInfo(`        Waiting ${waitTime/1000}s (API suggested + 5s) due to rate limit...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-
-      // Retry once after the wait period
-      const retryResponse = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${GROQ_API_KEY}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (retryResponse.status !== 200) {
-        reporter.verboseInfo(`        Retry failed with status ${retryResponse.status}`);
+      if (!validateGroqResponse(data)) {
+        reporter.verboseInfo(`        Unexpected response format for chunk ${i+1}: ${reporter.jsonString(data)}`);
         continue;
       }
 
-      const retryData = await retryResponse.json();
-      const retryResult = retryData.choices?.[0]?.message?.content?.trim() || '';
-
-      // Process the retry result using the API's actual response
-      if (retryResult.includes("CONCERNING CONTENT IDENTIFIED")) {
-        hasViolation = true;
-        reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length}:\n${retryResult}`);
-      } else if (retryResult.includes("NO CONCERNS IDENTIFIED")) {
-        reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length}:\n${retryResult}`);
-      } else {
-        const isViolation = retryResult.toLowerCase().includes('concerning') ||
-                           retryResult.toLowerCase().includes('violation') ||
-                           retryResult.toLowerCase().includes('harmful');
-        if (isViolation) {
-          hasViolation = true;
-        }
-        reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length}:\n${retryResult}`);
+      const result = extractMessageContent(data);
+      if (result) {
+        reporter.verboseInfo(`        API Result [chunk ${i+1}/${contentChunks.length}]:\n${result}`);
       }
 
-      continue;
-    }
-
-    // Handle 413 Request Too Large
-    if (response.status === 413) {
-      const errorDetails = await response.text();
-      reporter.verboseInfo(`        Request Too Large (413): ${errorDetails}`);
-
-      // For 413 errors, we should consider this a potential violation since large payloads might contain harmful content
-      hasViolation = true;
-      continue;
-    }
-
-    if (!response.ok) {
-      reporter.verboseInfo(`        API request failed with status ${response.status}`);
-
-      // For other non-success status codes, handle them appropriately
-      if (response.status === 400) { // Bad Request
-        const errorDetails = await response.text();
-        reporter.verboseInfo(`        Bad Request (400): ${errorDetails}`);
-        // Consider this as a potential violation - malformed content might be an attempt to bypass filters
-        hasViolation = true;
-      } else if (response.status >= 500) { // Server errors
-        const errorDetails = await response.text();
-        reporter.verboseInfo(`        Server Error (${response.status}): ${errorDetails}`);
-        // For server errors, we should try to continue rather than marking as violation
-        // The error might be temporary, so we'll continue processing other chunks
-      } else {
-        // For other errors, log them but continue processing
-        const errorDetails = await response.text();
-        reporter.verboseInfo(`        API Error (${response.status}): ${errorDetails}`);
+      if (!result) {
+        reporter.verboseInfo(`        Empty response from API for chunk ${i+1}, treating as OK.`);
+        continue;
       }
 
-      continue;
-    }
-
-    const data = await response.json();
-
-    reporter.verboseInfo(`        API Response [chunk ${i+1}/${contentChunks.length}]: has_choices=${!!data.choices}, choice_count=${data.choices?.length || 0}`);
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      reporter.verboseInfo(`        Unexpected response format for chunk ${i+1}: ${reporter.jsonString(data)}`);
-      continue;
-    }
-
-    const result = data.choices[0]?.message?.content?.trim() || '';
-
-    if (result) {
-      reporter.verboseInfo(`        API Result [chunk ${i+1}/${contentChunks.length}]:\n${result}`);
-    } else {
-      reporter.verboseInfo(`        API Result [chunk ${i+1}/${contentChunks.length}]: Content is empty. Full choice object:`);
-      reporter.verboseInfo(reporter.jsonString(data.choices[0]));
-    }
-
-    if (!result) {
-      // Treat empty response as OK, not a violation.
-      reporter.verboseInfo(`        Empty response from API for chunk ${i+1}, treating as OK.`);
-      continue;
-    }
-
-    // Use the API's actual response rather than our interpretations
-    const isViolation = result.includes("CONCERNING CONTENT IDENTIFIED");
-
-    if (isViolation) {
-      hasViolation = true;
-      reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length} Analysis:\n${reporter.jsonString(data.choices[0])}`);
-    } else if (result.includes("NO CONCERNS IDENTIFIED")) {
-      reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length}:\n${result}`);
-    } else {
-      // Fallback check for cases where the model might not use the exact phrase
-      const isImplicitViolation = result.toLowerCase().includes('concerning') ||
-                                  result.toLowerCase().includes('violation') ||
-                                  result.toLowerCase().includes('harmful');
-      if (isImplicitViolation) {
+      const isViolation = detectViolation(result, "CONCERNING CONTENT IDENTIFIED", ['concerning', 'violation', 'harmful']);
+      if (isViolation) {
         hasViolation = true;
         reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length} Analysis:\n${reporter.jsonString(data.choices[0])}`);
-      } else {
-        reporter.verboseInfo(`        Chunk ${i+1}/${contentChunks.length}:\n${result}`);
       }
+    } catch (error) {
+      reporter.verboseInfo(`        Error processing chunk ${i+1}: ${error}`);
+      continue;
     }
   }
 
   reporter.verboseInfo(`        Content analysis completed with ${contentChunks.length} chunk(s). Violation: ${hasViolation}`);
-
   return hasViolation;
 }
 
-// Function to moderate content with Llama Guard 4 12B model (for text and images)
-async function moderateWithLlamaGuard(content: string, isImageUrl: boolean, reporter: any): Promise<{ hasViolation: boolean, result: string }> {
+async function moderateWithLlamaGuard(content: string, isImageUrl: boolean, reporter: Reporter): Promise<{ hasViolation: boolean, result: string }> {
   if (!GROQ_API_KEY || !GROQ_API_BASE_URL) {
     throw new Error('GROQ_API_KEY and/or GROQ_API_BASE_URL are not set in environment variables');
   }
-
-  const llamaGuardPolicy = `
-    You are a content safety expert. Your task is to classify content as 'safe' or 'unsafe'.
-
-    CATEGORIES OF UNSAFE CONTENT:
-    O1: Violent Content (e.g., descriptions of physical harm, fighting)
-    O2: Hate Speech (e.g., derogatory terms, discrimination based on protected characteristics)
-    O3: Sexual Content (e.g., explicit descriptions, non-consensual intimate imagery)
-    O4: Self-Harm (e.g., promotion of self-mutilation, suicide ideation)
-    O5: Illegal Activities (e.g., drug manufacturing, illegal weapons, child exploitation)
-
-    If content falls into any UNSAFE category, respond with: "UNSAFE: [CATEGORY_CODE]"
-    If content is SAFE, respond with: "SAFE"
-
-    Content to evaluate:`;
 
   if (!content) {
     return { hasViolation: false, result: "SAFE (empty content)" };
   }
 
-  // Define max chunk size for Llama Guard (may be different from Safeguard)
-  const maxChunkSize = 28000;
-  let contentChunks = [];
+  const groqClient = new GroqApiClient(GROQ_API_KEY, GROQ_API_BASE_URL);
 
-  if (content.length <= maxChunkSize) {
-    contentChunks = [isImageUrl ? `Image URL: ${content}` : content];
-  } else {
-    // For images, we shouldn't chunk the URL, so return early
-    if (isImageUrl) {
-      return { hasViolation: true, result: "ERROR: Image URLs cannot be chunked for Llama Guard" };
-    }
+  if (isImageUrl) {
+    // For images, don't chunk
+    const contentToScan = `Image URL: ${content}`;
 
-    // Split content preserving HTML tags for HTML content
-    if (content.includes('<') && content.includes('>')) {
-      const tagBoundaries = /(<\/\w+>)/g;
-      let segments = [];
-      let lastIndex = 0;
-      let match;
-      let currentChunk = '';
+    reporter.verboseInfo(`        Llama Guard API Request: model=${CONFIG.models.llamaGuard}, is_image=true`);
 
-      while ((match = tagBoundaries.exec(content)) !== null) {
-        const segment = content.substring(lastIndex, match.index + match[0].length);
+    try {
+      const messages = [
+        { role: 'system', content: CONFIG.policies.llamaGuard },
+        { role: 'user', content: contentToScan }
+      ];
 
-        if ((currentChunk + segment).length > maxChunkSize && currentChunk !== '') {
-          segments.push(currentChunk);
-          currentChunk = segment;
-        } else {
-          currentChunk += segment;
-        }
+      const data = await groqClient.makeRequest(
+        CONFIG.models.llamaGuard,
+        messages,
+        CONFIG.apiLimits.llamaGuard.temperature,
+        CONFIG.apiLimits.llamaGuard.maxTokens,
+        reporter
+      );
 
-        lastIndex = match.index + match[0].length;
+      if (!validateGroqResponse(data)) {
+        const errorResult = `Unexpected response format: ${reporter.jsonString(data)}`;
+        reporter.verboseInfo(`        ${errorResult}`);
+        return { hasViolation: true, result: `API Format Error: ${errorResult}` };
       }
 
-      if (lastIndex < content.length) {
-        const remaining = content.substring(lastIndex);
-        if ((currentChunk + remaining).length <= maxChunkSize) {
-          currentChunk += remaining;
-        } else {
-          if (currentChunk !== '') {
-            segments.push(currentChunk);
-          }
-          if (remaining.length > maxChunkSize) {
-            for (let i = 0; i < remaining.length; i += maxChunkSize) {
-              segments.push(remaining.substring(i, i + maxChunkSize));
-            }
-          } else {
-            segments.push(remaining);
-          }
-          currentChunk = '';
-        }
-      }
+      const result = extractMessageContent(data);
+      reporter.verboseInfo(`        Llama Guard API Result:\n${result}`);
 
-      if (currentChunk.trim() !== '') {
-        segments.push(currentChunk);
-      }
-
-      contentChunks = segments;
-    } else {
-      // For non-HTML content
-      const paragraphs = content.split(/(?:\r?\n\s*){2,}/);
-      let currentChunk = '';
-
-      for (const paragraph of paragraphs) {
-        if ((currentChunk + paragraph).length > maxChunkSize && currentChunk !== '') {
-          contentChunks.push(currentChunk);
-          currentChunk = paragraph;
-        } else {
-          currentChunk += paragraph;
-        }
-      }
-
-      if (currentChunk.trim() !== '') {
-        contentChunks.push(currentChunk);
-      }
+      const isUnsafe = result.startsWith("UNSAFE");
+      return { hasViolation: isUnsafe, result: isUnsafe ? result : "SAFE" };
+    } catch (error: any) {
+      reporter.error("Llama Guard API", error);
+      return { hasViolation: true, result: `Exception: ${error.message || error}` };
     }
   }
 
+  // For text content, chunk it
+  const contentChunks = ContentChunker.chunkContent(content);
   let hasViolation = false;
   let lastResult = "SAFE";
 
   for (let i = 0; i < contentChunks.length; i++) {
     const chunk = contentChunks[i];
-
-    reporter.verboseInfo(`        Llama Guard API Request [chunk ${i+1}/${contentChunks.length}]: model=meta-llama/llama-guard-4-12b, content_length=${chunk.length}, is_image=${isImageUrl}`);
-
-    const requestBody = {
-      model: 'meta-llama/llama-guard-4-12b',
-      messages: [
-        {
-          role: 'system',
-          content: llamaGuardPolicy
-        },
-        {
-          role: 'user',
-          content: chunk
-        }
-      ],
-      temperature: 0,
-      max_tokens: 200, // Llama Guard responses should be short (SAFE or UNSAFE: O#)
-      stream: false
-    };
+    reporter.verboseInfo(`        Llama Guard API Request [chunk ${i+1}/${contentChunks.length}]: model=${CONFIG.models.llamaGuard}, content_length=${chunk.length}`);
 
     try {
-      const response = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${GROQ_API_KEY}`
-        },
-        body: JSON.stringify(requestBody)
-      });
+      const messages = [
+        { role: 'system', content: CONFIG.policies.llamaGuard },
+        { role: 'user', content: chunk }
+      ];
 
-      if (response.status !== 200) {
-        reporter.verboseInfo(`        Llama Guard API Response [chunk ${i+1}/${contentChunks.length}]: status=${response.status}`);
-      }
+      const data = await groqClient.makeRequest(
+        CONFIG.models.llamaGuard,
+        messages,
+        CONFIG.apiLimits.llamaGuard.temperature,
+        CONFIG.apiLimits.llamaGuard.maxTokens,
+        reporter
+      );
 
-      // Handle 429 rate limiting
-      if (response.status === 429) {
-        const errorDetails = await response.text();
-        reporter.verboseInfo(`        Llama Guard Rate Limit Response: ${errorDetails}`);
-
-        // Extract wait time from the error message
-        let waitTime = 10000; // Default wait time
-        try {
-          const errorObj = JSON.parse(errorDetails);
-          if (errorObj.error?.message) {
-            // Look for the wait time in the error message (e.g., "try again in 4.803999999s")
-            const match = errorObj.error.message.match(/try again in (\d+\.?\d*)s/);
-            if (match) {
-              const apiWaitTime = parseFloat(match[1]);
-              waitTime = Math.ceil(apiWaitTime * 1000) + 5000; // API wait time + 5 seconds
-            }
-          }
-        } catch (e) {
-          // If parsing fails, use the default wait time
-        }
-
-        reporter.verboseInfo(`        Waiting ${waitTime/1000}s (API suggested + 5s) due to rate limit...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-
-        // Retry once after the wait period
-        const retryResponse = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${GROQ_API_KEY}`
-          },
-          body: JSON.stringify(requestBody)
-        });
-
-        if (retryResponse.status !== 200) {
-          reporter.verboseInfo(`        Llama Guard retry failed with status ${retryResponse.status}`);
-          continue;
-        }
-
-        const retryData = await retryResponse.json();
-        const retryResult = retryData.choices?.[0]?.message?.content?.trim() || '';
-
-        reporter.verboseInfo(`        Llama Guard retry result [chunk ${i+1}/${contentChunks.length}]:\n${retryResult}`);
-
-        const isUnsafe = retryResult.startsWith("UNSAFE");
-        if (isUnsafe) {
-          hasViolation = true;
-          lastResult = retryResult;
-        } else {
-          lastResult = "SAFE";
-        }
-
+      if (!validateGroqResponse(data)) {
+        reporter.verboseInfo(`        Unexpected response for chunk ${i+1}: ${reporter.jsonString(data)}`);
         continue;
       }
 
-      // Handle 413 Request Too Large
-      if (response.status === 413) {
-        const errorDetails = await response.text();
-        reporter.verboseInfo(`        Llama Guard Request Too Large: ${errorDetails}`);
-        return { hasViolation: true, result: `ERROR: Request too large (413) - ${errorDetails}` };
-      }
-
-      // Handle 400 Bad Request specifically
-      if (response.status === 400) {
-        const errorDetails = await response.text();
-        reporter.verboseInfo(`        Llama Guard Bad Request (400): ${errorDetails}`);
-
-        // For 400 errors, this could be due to malformed content or other issues with this particular chunk
-        // We'll consider this a potential violation since malformed content might be an attempt to bypass filters
-        hasViolation = true;
-        lastResult = `Bad Request (400): ${errorDetails}`;
-        continue; // Continue to the next chunk rather than returning immediately
-      }
-
-      if (!response.ok) {
-        // For other non-success status codes
-        if (response.status >= 500) { // Server errors
-          const errorDetails = await response.text();
-          reporter.verboseInfo(`        Llama Guard Server Error (${response.status}): ${errorDetails}`);
-          // For server errors, we should try to continue rather than marking as violation
-          // The error might be temporary, so we'll continue processing other chunks
-        } else {
-          // For other errors (like 401, 403, etc.), log them but continue processing
-          const errorDetails = await response.text();
-          reporter.verboseInfo(`        Llama Guard API Error (${response.status}): ${errorDetails}`);
-        }
-
-        continue; // Continue to the next chunk instead of returning
-      }
-
-      const data = await response.json();
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        const errorResult = `Unexpected Llama Guard response format: ${reporter.jsonString(data)}`;
-        reporter.verboseInfo(`        ${errorResult}`);
-        return { hasViolation: true, result: `API Format Error: ${errorResult}` };
-      }
-
-      const result = data.choices[0]?.message?.content?.trim() || '';
+      const result = extractMessageContent(data);
       lastResult = result;
       reporter.verboseInfo(`        Llama Guard API Result [chunk ${i+1}/${contentChunks.length}]:\n${result}`);
 
-      const isUnsafe = result.startsWith("UNSAFE");
-      if (isUnsafe) {
+      if (result.startsWith("UNSAFE")) {
         hasViolation = true;
       }
-
     } catch (error: any) {
       reporter.error("Llama Guard API", error);
-      return { hasViolation: true, result: `Exception during API call: ${error.message || error}` };
+      return { hasViolation: true, result: `Exception: ${error.message || error}` };
     }
   }
 
-  return { hasViolation: hasViolation, result: hasViolation ? lastResult : "SAFE" };
+  return { hasViolation, result: hasViolation ? lastResult : "SAFE" };
 }
 
-// Define TypeScript interface for the response (matches server API response)
-interface StorageObject {
-  ObjectName: string;  // Using the exact property name from server API
-  Length: number;
-  LastChanged: string;
-  IsDirectory: boolean;
+async function explainContentWithGROQ(content: string, isImageUrl: boolean, reporter: Reporter): Promise<{ hasViolation: boolean, result: string }> {
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY environment variable is required");
+  }
+
+  const groqClient = new GroqApiClient(GROQ_API_KEY!, GROQ_API_BASE_URL!);
+
+  let messages: any[];
+  if (isImageUrl) {
+    messages = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: `In ${CONFIG.apiLimits.explain.wordLimit} words or less, describe and classify this image using standard movie-style parental guidance.` },
+          { type: "image_url", image_url: { url: content } }
+        ]
+      }
+    ];
+  } else {
+    // Clean HTML content
+    let cleanedContent = content
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleanedContent.length > CONFIG.apiLimits.explain.maxTextLength) {
+      cleanedContent = cleanedContent.substring(0, CONFIG.apiLimits.explain.maxTextLength);
+    }
+
+    messages = [
+      {
+        role: "user",
+        content: `In ${CONFIG.apiLimits.explain.wordLimit} words or less, describe as concisely as possible\n\nCONTENT:\n\`\`\`${cleanedContent}\`\`\``
+      }
+    ];
+  }
+
+  reporter.verboseInfo(`        Calling GROQ API for explanation with model: ${CONFIG.models.explain} (isImageUrl: ${isImageUrl})`);
+
+  try {
+    const data = await groqClient.makeRequest(
+      CONFIG.models.explain,
+      messages,
+      CONFIG.apiLimits.explain.temperature,
+      CONFIG.apiLimits.explain.maxTokens,
+      reporter
+    );
+
+    if (!validateGroqResponse(data)) {
+      const errorResult = `Unexpected response format: ${reporter.jsonString(data)}`;
+      reporter.verboseInfo(`        ${errorResult}`);
+      return { hasViolation: true, result: `API Format Error: ${errorResult}` };
+    }
+
+    const explanation = extractMessageContent(data);
+    reporter.verboseInfo(`        GROQ Explanation API Result:\n${explanation}`);
+    return { hasViolation: false, result: explanation };
+  } catch (error: any) {
+    const errorResult = `Request failed: ${error.message || error}`;
+    reporter.error("GROQ Explanation API", errorResult);
+    return { hasViolation: true, result: `API Error: ${errorResult}` };
+  }
 }
 
-// Define scanner-specific handlers with common interface
-interface ScannerResult {
-  hasViolation: boolean;
-  result: string;
+async function scanImageWithArachnidShieldFromUrl(fileUrl: string, reporter: Reporter): Promise<any> {
+  const shield = new ArachnidShield(ARACHNID_API_USERNAME!, ARACHNID_API_PASSWORD!);
+  reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${fileUrl}`);
+  const scanResult = await shield.scanMediaFromUrl(fileUrl);
+  reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(scanResult)}`);
+  return scanResult;
 }
 
-interface ScannerHandler {
-  scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult>;
-  getCacheKey(content: string, isImageUrl: boolean): string;
-}
+// ============================================================================
+// SCANNER HANDLER CLASSES
+// ============================================================================
 
 class SafeguardHandler implements ScannerHandler {
-  async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+  async scan(content: string, isImageUrl: boolean, reporter: Reporter): Promise<ScannerResult> {
     const hasViolation = await moderateContentWithSafeguard(content, reporter);
-    // Return a more detailed result for caching
     const result = hasViolation ? 'VIOLATION DETECTED' : 'SAFE';
     return { hasViolation, result };
   }
 
-  getCacheKey(content: string, isImageUrl: boolean): string {
-    // For Safeguard, cache based on content
-    return computeContentHash(content);
+  getCacheKey(filePath: string, isImageUrl: boolean): string {
+    return computeContentHash(filePath + ':safeguard');
   }
 }
 
 class GuardHandler implements ScannerHandler {
-  async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+  async scan(content: string, isImageUrl: boolean, reporter: Reporter): Promise<ScannerResult> {
     const result = await moderateWithLlamaGuard(content, isImageUrl, reporter);
     return { hasViolation: result.hasViolation, result: result.result };
   }
 
-  getCacheKey(content: string, isImageUrl: boolean): string {
-    // For Guard, cache based on content
-    return computeContentHash(content);
+  getCacheKey(filePath: string, isImageUrl: boolean): string {
+    return computeContentHash(filePath + ':guard');
   }
 }
 
 class ShieldHandler implements ScannerHandler {
-  async scan(url: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
-    // Create an instance of ArachnidShield with the API credentials
-    // Using default base URL for Arachnid Shield
-    const shield = new ArachnidShield(ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD);
-
-    // Perform the scan using the SDK
+  async scan(url: string, isImageUrl: boolean, reporter: Reporter): Promise<ScannerResult> {
+    const shield = new ArachnidShield(ARACHNID_API_USERNAME!, ARACHNID_API_PASSWORD!);
     reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${url}`);
     const scanResult = await shield.scanMediaFromUrl(url);
     reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(scanResult)}`);
@@ -678,470 +855,91 @@ class ShieldHandler implements ScannerHandler {
 
     if (scanResult.status === 'ok' && scanResult.data.is_match) {
       hasViolation = true;
-      result = scanResult.data.classification ? `CSAM Match - Classification: ${scanResult.data.classification}` : 'CSAM Match - No classification provided';
+      result = scanResult.data.classification ? `CSAM Match - Classification: ${scanResult.data.classification}` : 'CSAM Match';
     } else if (scanResult.status === 'err') {
       hasViolation = true;
       result = `Error: ${scanResult.data}`;
     }
 
-    // Return the full scan result for caching
     return { hasViolation, result: reporter.jsonString(scanResult) };
   }
 
-  getCacheKey(url: string, isImageUrl: boolean): string {
-    // For Shield, cache based on URL
-    return computeContentHash(url);
+  getCacheKey(filePath: string, isImageUrl: boolean): string {
+    return computeContentHash(filePath + ':shield');
   }
 }
 
 class ExplainHandler implements ScannerHandler {
-  async scan(content: string, isImageUrl: boolean, reporter: any): Promise<ScannerResult> {
+  async scan(content: string, isImageUrl: boolean, reporter: Reporter): Promise<ScannerResult> {
     const result = await explainContentWithGROQ(content, isImageUrl, reporter);
-    // For explanation, we don't have violations in the traditional sense,
-    // we're just providing summaries, so return hasViolation: false
     return { hasViolation: false, result: result.result };
   }
 
-  getCacheKey(content: string, isImageUrl: boolean): string {
-    // For Explain, cache based on content or URL
-    return computeContentHash(content);
+  getCacheKey(filePath: string, isImageUrl: boolean): string {
+    return computeContentHash(filePath + ':explain');
   }
 }
 
-// Generic scanning function that can work with any scanner
-async function genericScan(scannerHandler: ScannerHandler, content: string, isImageUrl: boolean, cacheType: string, fileLocation: string, reporter: any, useCache: boolean = true): Promise<{ hasViolation: boolean, result: string }> {
-  // Get the cache key using the scanner's specific method
-  const cacheKey = scannerHandler.getCacheKey(content, isImageUrl);
+// ============================================================================
+// GENERIC SCANNING
+// ============================================================================
 
-  // Check if this content has already been scanned (only if cache is enabled)
-  if (useCache && checkCachedScan(cacheKey, cacheType)) {
-    // Read cached response
-    const cachedResponse = await readCachedResponse(cacheKey, cacheType);
+async function genericScan(
+  scannerHandler: ScannerHandler,
+  filePath: string,
+  isImageUrl: boolean,
+  cacheType: string,
+  reporter: Reporter,
+  useCache: boolean = true,
+  noCache: boolean = false
+): Promise<{ hasViolation: boolean, result: string, apiCallMade: boolean }> {
+  // Check cache FIRST with path-based key (no file fetch needed!)
+  const cacheKey = scannerHandler.getCacheKey(filePath, isImageUrl);
 
-    reporter.info(`  ${fileLocation}: ${cacheType.toUpperCase()} OK (cached)`);
+  reporter.verboseInfo(`  ${filePath}: Checking ${cacheType} scan cache (key: ${cacheKey.substring(0, 8)}...)`);
 
-    // If verbose mode is enabled, show the cached response
-    if (reporter.verbose) {
-      reporter.verboseInfo(`        Cached ${cacheType.toUpperCase()} Response:\n${cachedResponse || ''}`);
+  if (useCache && cacheManager.checkScan(cacheKey, cacheType)) {
+    reporter.verboseInfo(`  ${filePath}: ✓ Found cached ${cacheType} scan result - SKIPPING SCANNER & FILE FETCH`);
+    const cachedResponse = await cacheManager.readScanResponse(cacheKey, cacheType);
+    reporter.info(`  ${filePath}: ${cacheType.toUpperCase()} OK (cached scan)`);
+    if (reporter.verbose && cachedResponse) {
+      reporter.verboseInfo(`        Cached ${cacheType.toUpperCase()} Response:\n${cachedResponse}`);
     }
-
-    // For cached results, return false for hasViolation and the cached response
-    return { hasViolation: false, result: cachedResponse || 'SAFE (cached)' };
+    return { hasViolation: false, result: cachedResponse || 'SAFE (cached)', apiCallMade: false };
   }
 
-  // Perform the scan using the specific scanner handler
+  // Cache miss - NOW fetch the file
+  reporter.verboseInfo(`  ${filePath}: ✗ No cached scan result - RUNNING ${cacheType.toUpperCase()} SCANNER`);
+
+  const content = isImageUrl
+    ? buildFileUrl(filePath)
+    : (await fetchFileContent(filePath, noCache, reporter)).content;
+
+  reporter.verboseInfo(`  ${filePath}: File content ready for scanning`);
+
+  // Scan the content
   const scanResult = await scannerHandler.scan(content, isImageUrl, reporter);
 
   if (scanResult.hasViolation) {
-    reporter.violation(fileLocation, cacheType.toUpperCase(), scanResult.result);
+    reporter.violation(filePath, cacheType.toUpperCase(), scanResult.result);
   } else {
-    reporter.ok(fileLocation, cacheType.toUpperCase());
+    reporter.ok(filePath, cacheType.toUpperCase());
   }
 
-  // Save to cache with the full response
-  // Regardless of useCache flag, when we perform a scan, we save the result to update the cache
-  // This ensures that in no-cache mode, new results replace old cached results
-  saveScanToCache(cacheKey, cacheType, scanResult.result);
-
-  return { hasViolation: scanResult.hasViolation, result: scanResult.result };
+  reporter.verboseInfo(`  ${filePath}: Saving scan result to cache (key: ${cacheKey.substring(0, 8)}...)`);
+  cacheManager.saveScan(cacheKey, cacheType, scanResult.result);
+  return { hasViolation: scanResult.hasViolation, result: scanResult.result, apiCallMade: true };
 }
 
-// Function to explain content using appropriate models via GROQ API
-async function explainContentWithGROQ(content: string, isImageUrl: boolean, reporter: any): Promise<{ hasViolation: boolean, result: string }> {
-  const GROQ_API_KEY = process.env.GROQ_API_KEY;
-  if (!GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY environment variable is required for explain functionality");
-  }
-
-  const model = "meta-llama/llama-4-scout-17b-16e-instruct";
-
-  // Prepare the content for the API request
-  // If it's an image, we'll send the URL. If it's text, we'll send the content.
-  let messages: any[];
-  if (isImageUrl) {
-    // For images, send a message requesting an explanation of the image
-    messages = [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "In 20 words or less, describe and classify this image using standard movie-style parental guidance."
-          },
-          {
-            type: "image_url",
-            image_url: {
-              url: content
-            }
-          }
-        ]
-      }
-    ];
-  } else {
-    // For text, extract ONLY the text content without HTML tags using a more aggressive approach
-    // First remove script and style elements completely
-    let cleanedContent = content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ');
-    cleanedContent = cleanedContent.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ');
-
-    // Then extract only text between HTML tags
-    let textContent = cleanedContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-
-    // Clean up common HTML artifacts
-    textContent = textContent.replace(/<!DOCTYPE[^>]*>/gi, ' ').replace(/\s+/g, ' ').trim();
-
-    // Shorten content if too long
-    if (textContent.length > 2000) {
-      textContent = textContent.substring(0, 2000);
-    }
-
-    messages = [
-      {
-        role: "user",
-        content: `In 20 words or less, describe as consicely as possible\n\nCONTENT:\n\`\`\`${textContent}\`\`\``
-      }
-    ];
-  }
-
-  const requestBody = {
-    model: model,
-    messages: messages,
-    temperature: 0.7,
-    max_tokens: 1000,
-    top_p: 1,
-    stream: false,
-    stop: null,
-  };
-
-  reporter.verboseInfo(`        Calling GROQ API for explanation with model: ${model} (isImageUrl: ${isImageUrl})`);
-
-  const response = await fetch(`${GROQ_API_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_API_KEY}`
-    },
-    body: JSON.stringify(requestBody)
-  });
-
-  if (response.status !== 200) {
-    reporter.verboseInfo(`        GROQ Explanation API Response: status=${response.status}`);
-  }
-
-  if (!response.ok) {
-    const errorResult = `Request failed with status ${response.status}: ${await response.text()}`;
-    reporter.error("GROQ Explanation API", errorResult);
-    return { hasViolation: true, result: `API Error: ${errorResult}` };
-  }
-
-  const data = await response.json();
-
-  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    const errorResult = `Unexpected GROQ Explanation response format: ${reporter.jsonString(data)}`;
-    reporter.verboseInfo(`        ${errorResult}`);
-    return { hasViolation: true, result: `API Format Error: ${errorResult}` };
-  }
-
-  const explanation = data.choices[0]?.message?.content?.trim() || '';
-  reporter.verboseInfo(`        GROQ Explanation API Result:\n${explanation}`);
-
-  return { hasViolation: false, result: explanation };
-}
-
-// Function to scan an image with Arachnid Shield SDK using URL
-async function scanImageWithArachnidShieldFromUrl(fileUrl: string, reporter: any): Promise<any> {
-  // Create an instance of ArachnidShield with the API credentials
-  // Using default base URL for Arachnid Shield
-  const shield = new ArachnidShield(ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD);
-
-  // Perform the scan using the SDK
-  reporter.verboseInfo(`        Pinging Arachnid Shield API for: ${fileUrl}`);
-  const scanResult = await shield.scanMediaFromUrl(fileUrl);
-  reporter.verboseInfo(`        Arachnid Shield API raw response:\n${reporter.jsonString(scanResult)}`);
-
-  return scanResult;
-}
-
-// Function to build a properly encoded URL for a file path
-function buildFileUrl(objectName: string): string {
-  // Use encodeURI which is designed for full URIs and handles spaces properly (as %20)
-  return `${BUNNY_PULL_ZONE}${encodeURI(objectName)}`;
-}
-
-// Function to compute the MD4 hash of a string using Bun's CryptoHasher
-function computeContentHash(content: string): string {
-  const hasher = new Bun.CryptoHasher("md4");
-  hasher.update(content);
-  return hasher.digest("hex");
-}
-
-// Function to check if a cached scan result exists for a given content hash and model
-function checkCachedScan(hash: string, model: string): boolean {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.${model}`);
-
-  // Ensure the cache directory exists
-  if (!existsSync(cacheDir)) {
-    mkdirSync(cacheDir, { recursive: true });
-  }
-
-  return existsSync(cacheFilePath);
-}
-
-// Function to save a scan result to cache
-function saveScanToCache(hash: string, model: string, response: string = ""): void {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.${model}`);
-
-  // Ensure the cache directory exists
-  if (!existsSync(cacheDir)) {
-    mkdirSync(cacheDir, { recursive: true });
-  }
-
-  // Save the API response to the cache file
-  Bun.write(cacheFilePath, response);
-}
-
-// Function to read a cached response
-async function readCachedResponse(hash: string, model: string): Promise<string | null> {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.${model}`);
-
-  if (existsSync(cacheFilePath)) {
-    return await Bun.file(cacheFilePath).text();
-  }
-
-  return null;
-}
-
-// Function to save file data to cache
-function saveFileDataToCache(hash: string, data: string): void {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.data`);
-
-  // Ensure the cache directory exists
-  if (!existsSync(cacheDir)) {
-    mkdirSync(cacheDir, { recursive: true });
-  }
-
-  // Save the file data to the cache file
-  Bun.write(cacheFilePath, data);
-}
-
-// Function to read cached file data
-async function readCachedFileData(hash: string): Promise<string | null> {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.data`);
-
-  if (existsSync(cacheFilePath)) {
-    return await Bun.file(cacheFilePath).text();
-  }
-
-  return null;
-}
-
-// Function to save ETag to cache
-function saveEtagToCache(hash: string, etag: string): void {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.etag`);
-
-  // Ensure the cache directory exists
-  if (!existsSync(cacheDir)) {
-    mkdirSync(cacheDir, { recursive: true });
-  }
-
-  // Save the ETag to the cache file
-  Bun.write(cacheFilePath, etag);
-}
-
-// Function to read cached ETag
-async function readCachedEtag(hash: string): Promise<string | null> {
-  const cacheDir = `!moderation/.cache/`;
-  const cacheFilePath = join(cacheDir, `${hash}.etag`);
-
-  if (existsSync(cacheFilePath)) {
-    return await Bun.file(cacheFilePath).text();
-  }
-
-  return null;
-}
-
-// Function to fetch file content from Bunny storage using the storage API with ETag-based caching
-async function fetchFileContent(objectName: string, noCache: boolean = false): Promise<string> {
-  // Use the file path for hashing instead of content
-  const contentHash = computeContentHash(objectName);
-
-  // If no-cache is specified, skip using the cache
-  if (noCache) {
-    // Use the storage API directly instead of the pull zone to avoid URL encoding issues
-    const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
-
-    const response = await fetch(storageUrl, {
-      headers: {
-        AccessKey: BUNNY_API_KEY
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
-    }
-
-    // Get the response content
-    const content = await response.text();
-
-    // Check if the response includes a new ETag and save it to cache
-    const newEtag = response.headers.get('etag');
-    if (newEtag) {
-      // Save the new ETag and content to cache, overwriting any existing cache
-      saveEtagToCache(contentHash, newEtag);
-      saveFileDataToCache(contentHash, content);
-    }
-
-    return content;
-  }
-
-  // Try to get cached etag and data
-  const cachedEtag = await readCachedEtag(contentHash);
-  const cachedData = await readCachedFileData(contentHash);
-
-  // Use the storage API directly instead of the pull zone to avoid URL encoding issues
-  const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
-
-  // Prepare request headers
-  const headers: any = {
-    AccessKey: BUNNY_API_KEY
-  };
-
-  // If we have a cached ETag, add it to the request headers for conditional request
-  if (cachedEtag) {
-    headers['If-None-Match'] = cachedEtag;
-  }
-
-  const response = await fetch(storageUrl, {
-    headers: headers
-  });
-
-  if (response.status === 304) {
-    // File hasn't changed, return cached data
-    if (cachedData !== null) {
-      return cachedData;
-    } else {
-      // This shouldn't happen if we have an ETag, but handle gracefully
-      throw new Error('Received 304 but no cached data found');
-    }
-  } else if (!response.ok) {
-    throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
-  }
-
-  // Get the response content
-  const content = await response.text();
-
-  // Check if the response includes a new ETag
-  const newEtag = response.headers.get('etag');
-  if (newEtag) {
-    // Save the new ETag and content to cache
-    saveEtagToCache(contentHash, newEtag);
-    saveFileDataToCache(contentHash, content);
-  }
-
-  return content;
-}
-
-// Function to fetch file content and etag from Bunny storage using the storage API
-async function fetchFileContentWithEtag(objectName: string, reporter: any, noCache: boolean = false): Promise<{content: string, etag: string | null}> {
-  // Use the file path for hashing instead of content
-  const contentHash = computeContentHash(objectName);
-
-  // If no-cache is specified, skip using the cache
-  if (noCache) {
-    // Use the storage API directly instead of the pull zone to avoid URL encoding issues
-    const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
-
-    const response = await fetch(storageUrl, {
-      headers: {
-        AccessKey: BUNNY_API_KEY
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
-    }
-
-    // Get the response content
-    const content = await response.text();
-
-    // Check if the response includes a new ETag
-    const newEtag = response.headers.get('etag');
-    if (newEtag) {
-      // Display the new ETag
-      reporter.info(`  ${objectName}: ETag: ${newEtag}`);
-
-      // Save the new ETag and content to cache, overwriting any existing cache
-      saveEtagToCache(contentHash, newEtag);
-      saveFileDataToCache(contentHash, content);
-    }
-
-    return { content, etag: newEtag };
-  }
-
-  // Try to get cached etag and data
-  const cachedEtag = await readCachedEtag(contentHash);
-  const cachedData = await readCachedFileData(contentHash);
-
-  // Use the storage API directly instead of the pull zone to avoid URL encoding issues
-  const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
-
-  // Prepare request headers
-  const headers: any = {
-    AccessKey: BUNNY_API_KEY
-  };
-
-  // If we have a cached ETag, add it to the request headers for conditional request
-  if (cachedEtag) {
-    headers['If-None-Match'] = cachedEtag;
-  }
-
-  const response = await fetch(storageUrl, {
-    headers: headers
-  });
-
-  if (response.status === 304) {
-    // File hasn't changed, return cached data
-    if (cachedData !== null) {
-      return { content: cachedData, etag: cachedEtag };
-    } else {
-      // This shouldn't happen if we have an ETag, but handle gracefully
-      throw new Error('Received 304 but no cached data found');
-    }
-  } else if (!response.ok) {
-    throw new Error(`Failed to fetch file via storage API: ${response.status} ${response.statusText}`);
-  }
-
-  // Get the response content
-  const content = await response.text();
-
-  // Check if the response includes a new ETag
-  const newEtag = response.headers.get('etag');
-  if (newEtag) {
-    // Display the new ETag
-    reporter.info(`  ${objectName}: ETag: ${newEtag}`);
-
-    // Save the new ETag and content to cache
-    saveEtagToCache(contentHash, newEtag);
-    saveFileDataToCache(contentHash, content);
-  }
-
-  return { content, etag: newEtag };
-}
-
+// ============================================================================
+// FILE OPERATIONS
+// ============================================================================
 
 async function listStorageObjects(path: string = ""): Promise<StorageObject[]> {
   try {
-    // Use the Bunny Storage API directly, similar to how the server does it
     const url = `${BUNNY_STORAGE_URL}${path}`;
     const response = await fetch(url, {
-      headers: {
-        AccessKey: BUNNY_API_KEY
-      }
+      headers: { AccessKey: BUNNY_API_KEY! }
     });
 
     if (!response.ok) {
@@ -1149,24 +947,25 @@ async function listStorageObjects(path: string = ""): Promise<StorageObject[]> {
       return [];
     }
 
-    const items: StorageObject[] = await response.json();
-    return items;
+    return await response.json();
   } catch (error) {
     console.error(`Error listing objects in path "${path}":`, error);
     return [];
   }
 }
 
-// Function to recursively get all objects in a path
-async function getAllObjectsRecursively(path: string = "/", depth: number = 0, maxDepth: number = 10): Promise<StorageObject[]> {
-  // Prevent infinite recursion
+async function getAllObjectsRecursively(
+  path: string = "/",
+  depth: number = 0,
+  maxDepth: number = CONFIG.storage.maxRecursionDepth
+): Promise<StorageObject[]> {
   if (depth > maxDepth) {
     console.warn(`Max depth (${maxDepth}) reached for path: ${path}`);
     return [];
   }
 
   const url = `${BUNNY_STORAGE_URL}${path}`;
-  const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY } });
+  const res = await fetch(url, { headers: { AccessKey: BUNNY_API_KEY! } });
   if (!res.ok) return [];
 
   const items = await res.json();
@@ -1189,136 +988,96 @@ async function getAllObjectsRecursively(path: string = "/", depth: number = 0, m
   return allFiles;
 }
 
-// Run the main function
-async function main() {
-  // Handle the --help argument first
-  if (args.help) {
-    console.log(`
-Content Safety Scanner for public.monster
+async function fetchFileContent(objectName: string, noCache: boolean, reporter?: Reporter): Promise<{ content: string, etag: string | null }> {
+  const contentHash = computeContentHash(objectName);
+  const storageUrl = `${BUNNY_STORAGE_URL}${objectName}`;
 
-Usage: bun run run [options]
-
-Options:
-  --help              Show this help message
-  --list-users        Just list the discovered users without scanning content
-  --violations-only   Only output files that have violations detected
-  --user <username>   Specify a particular user to scan (e.g., --user ~username)
-                      If not specified, will scan all users
-
-Examples:
-  bun run run --list-users           # List all users
-  bun run run --user ~username       # Scan a specific user
-  bun run run --violations-only      # Show only violations
-  bun run run --user ~username --violations-only # Scan specific user and show only violations
-    `);
-    return; // Exit after showing help
-  }
-
-  // Handle the --list-users argument next
-  if (args['list-users']) {
-    console.log(`Fetching contents of storage zone: ${STORAGE_ZONE_NAME}\n`);
-
-    // Get the top-level directories (potential username folders)
-    const topLevelUrl = `${BUNNY_STORAGE_URL}/`;
-    const topLevelRes = await fetch(topLevelUrl, {
-      headers: {
-        AccessKey: BUNNY_API_KEY
-      }
+  if (noCache) {
+    const response = await fetch(storageUrl, {
+      headers: { AccessKey: BUNNY_API_KEY! }
     });
 
-    if (!topLevelRes.ok) {
-      console.error(`Failed to fetch top-level directories: ${topLevelRes.status} ${topLevelRes.statusText}`);
-      return;
+    if (reporter) {
+      reporter.verboseInfo(`  ${objectName}: HTTP ${response.status} (--no-cache mode)`);
     }
 
-    const topLevelItems = await topLevelRes.json();
-
-    // Filter for directories that start with ~ (username folders)
-    const usernameFolders = topLevelItems.filter((item: any) =>
-      item.IsDirectory && item.ObjectName.startsWith('~')
-    );
-
-    console.log("Username Folders (Directories):");
-    console.log("===============================");
-    for (const dir of usernameFolders) {
-      console.log(`. ${dir.ObjectName}/`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
     }
-    return; // Exit after listing users
+
+    const content = await response.text();
+    const newEtag = response.headers.get('etag');
+
+    if (newEtag) {
+      cacheManager.saveEtag(contentHash, newEtag);
+      cacheManager.saveFileData(contentHash, content);
+      if (reporter) reporter.verboseInfo(`  ${objectName}: ETag: ${newEtag}`);
+    }
+
+    return { content, etag: newEtag };
   }
 
-  // Configure console depth based on various settings
-  // Priority: --console-depth argument > Bun's console depth setting > default, with verbose mode adjustment
-  const bunConsoleDepth = (globalThis as any).Bun?.consoleDepth || (globalThis as any).console?.depth || 2;
-  const argConsoleDepth = args['console-depth'] !== undefined ? parseInt(args['console-depth']) : null;
-  const baseConsoleDepth = argConsoleDepth !== null ? argConsoleDepth : bunConsoleDepth;
-  const adjustedConsoleDepth = args.verbose ? Math.max(baseConsoleDepth, 8) : baseConsoleDepth;
+  // Try to use cache with ETag validation
+  const cachedEtag = await cacheManager.readEtag(contentHash);
+  const cachedData = await cacheManager.readFileData(contentHash);
 
-  // Create a dedicated reporter object to handle all console output cleanly.
-  // This centralizes the logic for verbose and violations-only modes.
-  const reporter = {
-    verbose: args.verbose,
-    violationsOnly: args['violations-only'],
-    depth: adjustedConsoleDepth, // Use console depth from Bun, argument, or default, adjusted for verbose mode
-
-    // Reports a successful scan (no violation).
-    ok(file: string, scanner: string) {
-      if (this.violationsOnly) return; // In violations-only mode, successful scans are silent.
-
-      const message = this.verbose
-        ? `        Status: No violation detected by ${scanner}`
-        : `  ${file}: ${scanner} OK`;
-      console.log(message);
-    },
-
-    // Reports a detected violation.
-    violation(file: string, scanner: string, details?: string) {
-      const baseMessage = this.verbose
-        ? `        Status: ${scanner} VIOLATION DETECTED`
-        : `  ${file}: ${scanner} VIOLATION DETECTED`;
-
-      console.log(baseMessage);
-      if (this.verbose && details) {
-        console.log(`        Details: ${details}`);
-      }
-    },
-
-    // Reports general information, respecting output rules.
-    info(message: string) {
-      // Info is only shown if not in violations-only mode.
-      if (!this.violationsOnly) {
-        console.log(message);
-      }
-    },
-
-    // Reports verbose-only information.
-    verboseInfo(message: string) {
-      if (this.verbose) {
-        console.log(message);
-      }
-    },
-
-    // Provides JSON string representation with configurable depth
-    jsonString(obj: any): string {
-      return JSON.stringify(obj, null, this.depth);
-    },
-
-    // Reports an error for a specific file.
-    error(file: string, error: any) {
-      console.error(`        Error scanning ${file}:`, error);
-    }
+  // Build headers - include If-None-Match if we have a cached ETag
+  const headers: Record<string, string> = {
+    AccessKey: BUNNY_API_KEY!
   };
 
-  // Apply console depth setting
-  (console as any).depth = adjustedConsoleDepth;
+  if (cachedEtag) {
+    headers['If-None-Match'] = cachedEtag;
+  }
 
+  // Make conditional request to validate cache
+  const response = await fetch(storageUrl, { headers });
+
+  if (reporter) {
+    reporter.verboseInfo(`  ${objectName}: HTTP ${response.status}${cachedEtag ? ' (conditional request)' : ' (no cache)'}`);
+  }
+
+  // 304 Not Modified - cached data is still valid
+  if (response.status === 304) {
+    if (cachedData !== null) {
+      if (reporter) reporter.verboseInfo(`  ${objectName}: Using cached data (validated)`);
+      return { content: cachedData, etag: cachedEtag };
+    } else {
+      throw new Error('Received 304 but no cached data found');
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+  }
+
+  // 200 OK - fetch new content
+  const content = await response.text();
+  const newEtag = response.headers.get('etag');
+
+  if (newEtag) {
+    cacheManager.saveEtag(contentHash, newEtag);
+    cacheManager.saveFileData(contentHash, content);
+    if (reporter) reporter.verboseInfo(`  ${objectName}: Cache updated with new ETag: ${newEtag}`);
+  }
+
+  return { content, etag: newEtag };
+}
+
+// ============================================================================
+// MAIN FUNCTION HELPERS
+// ============================================================================
+
+function showHelp(): void {
+  console.log(CONFIG.cli.helpText);
+}
+
+async function listUsers(): Promise<void> {
   console.log(`Fetching contents of storage zone: ${STORAGE_ZONE_NAME}\n`);
 
-  // Get the top-level directories (potential username folders)
   const topLevelUrl = `${BUNNY_STORAGE_URL}/`;
   const topLevelRes = await fetch(topLevelUrl, {
-    headers: {
-      AccessKey: BUNNY_API_KEY
-    }
+    headers: { AccessKey: BUNNY_API_KEY! }
   });
 
   if (!topLevelRes.ok) {
@@ -1327,403 +1086,309 @@ Examples:
   }
 
   const topLevelItems = await topLevelRes.json();
+  const usernameFolders = topLevelItems.filter((item: any) =>
+    item.IsDirectory && item.ObjectName.startsWith('~')
+  );
 
-  // Filter for directories that start with ~ (username folders)
+  console.log("Username Folders (Directories):");
+  console.log("===============================");
+  for (const dir of usernameFolders) {
+    console.log(`. ${dir.ObjectName}/`);
+  }
+}
+
+async function getUserFolders(requestedUser?: string): Promise<any[]> {
+  const topLevelUrl = `${BUNNY_STORAGE_URL}/`;
+  const topLevelRes = await fetch(topLevelUrl, {
+    headers: { AccessKey: BUNNY_API_KEY! }
+  });
+
+  if (!topLevelRes.ok) {
+    console.error(`Failed to fetch top-level directories: ${topLevelRes.status} ${topLevelRes.statusText}`);
+    return [];
+  }
+
+  const topLevelItems = await topLevelRes.json();
   let usernameFolders = topLevelItems.filter((item: any) =>
     item.IsDirectory && item.ObjectName.startsWith('~')
   );
 
-  // If a specific user was requested, filter the list to only that user
-  if (args.user) {
-    const requestedUser = args.user.startsWith('~') ? args.user : `~${args.user}`;
-    usernameFolders = usernameFolders.filter((dir: any) => dir.ObjectName === requestedUser);
+  if (requestedUser) {
+    const normalizedUser = requestedUser.startsWith('~') ? requestedUser : `~${requestedUser}`;
+    usernameFolders = usernameFolders.filter((dir: any) => dir.ObjectName === normalizedUser);
 
     if (usernameFolders.length === 0) {
-      console.log(`User ${requestedUser} not found.`);
-      return;
+      console.log(`User ${normalizedUser} not found.`);
     }
   }
 
-  if (usernameFolders.length > 0) {
-    if (!args['violations-only']) {
-      console.log("Username Folders (Directories):");
-      console.log("===============================");
+  return usernameFolders;
+}
+
+function filterFilesByType(files: StorageObject[], type: 'shield' | 'text' | 'llamaGuard' | 'all'): StorageObject[] {
+  if (type === 'all') {
+    return files.filter(obj => !obj.IsDirectory && matchesExtensions(obj.ObjectName, FILE_EXTENSIONS.all));
+  }
+
+  return files.filter(obj => !obj.IsDirectory && matchesExtensions(obj.ObjectName, FILE_EXTENSIONS[type]));
+}
+
+async function scanFilesWithHandler(
+  files: StorageObject[],
+  handler: ScannerHandler,
+  handlerName: string,
+  cacheType: string,
+  reporter: Reporter,
+  useCache: boolean,
+  noCache: boolean
+): Promise<void> {
+  if (files.length === 0) {
+    reporter.info(`    No files found for ${handlerName}`);
+    return;
+  }
+
+  reporter.info(`    Files found for ${handlerName}: ${files.length}`);
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const isImageUrl = matchesExtensions(file.ObjectName, FILE_EXTENSIONS.shield);
+
+    try {
+      // Pass filePath to genericScan - it will check cache first, only fetch if needed
+      const result = await genericScan(handler, file.ObjectName, isImageUrl, cacheType, reporter, useCache, noCache);
+
+      // Only delay if scanner actually made an API call (cache miss)
+      if (i < files.length - 1 && result.apiCallMade) {
+        reporter.verboseInfo(`  Waiting ${CONFIG.rateLimiting.delayBetweenFilesMs/1000}s before next file (rate limiting)`);
+        await new Promise(resolve => setTimeout(resolve, CONFIG.rateLimiting.delayBetweenFilesMs));
+      }
+    } catch (error) {
+      reporter.error(file.ObjectName, error);
     }
-    for (const dir of usernameFolders) {
-      // Track if any violations were found for this user
-      let userHasViolations = false;
-
-      // Create a custom reporter that tracks violations for this user
-      const userReporter = {
-        verbose: reporter.verbose,
-        violationsOnly: reporter.violationsOnly,
-        depth: reporter.depth,
-
-        // Reports a successful scan (no violation).
-        ok(file: string, scanner: string) {
-          if (this.violationsOnly) return; // In violations-only mode, successful scans are silent.
-
-          const message = this.verbose
-            ? `        Status: No violation detected by ${scanner}`
-            : `  ${file}: ${scanner} OK`;
-          console.log(message);
-        },
-
-        // Reports a detected violation.
-        violation(file: string, scanner: string, details?: string) {
-          userHasViolations = true; // Mark this user as having violations
-          const baseMessage = this.verbose
-            ? `        Status: ${scanner} VIOLATION DETECTED`
-            : `  ${file}: ${scanner} VIOLATION DETECTED`;
-
-          console.log(baseMessage);
-          if (this.verbose && details) {
-            console.log(`        Details: ${details}`);
-          }
-        },
-
-        // Reports general information, respecting output rules.
-        info(message: string) {
-          // Info is only shown if not in violations-only mode.
-          if (!this.violationsOnly) {
-            console.log(message);
-          }
-        },
-
-        // Reports verbose-only information.
-        verboseInfo(message: string) {
-          if (this.verbose) {
-            console.log(message);
-          }
-        },
-
-        // Provides JSON string representation with configurable depth
-        jsonString(obj: any): string {
-          return JSON.stringify(obj, null, this.depth);
-        },
-
-        // Reports an error for a specific file.
-        error(file: string, error: any) {
-          console.error(`        Error scanning ${file}:`, error);
-          userHasViolations = true; // Consider errors as violations for this purpose
-        }
-      };
-
-      // Output username only if not using violations-only mode, or if violations will be found later
-      if (!args['violations-only']) {
-        console.log(`. ${dir.ObjectName}/`);
-      }
-
-      // Get objects in each username folder (recursively)
-      const folderObjects = await getAllObjectsRecursively(`/${dir.ObjectName}/`);
-
-      // Filter for all allowed file types as per server config
-      const allowedFiles = folderObjects.filter(obj =>
-        !obj.IsDirectory &&
-        (obj.ObjectName.toLowerCase().endsWith('.html') ||
-         obj.ObjectName.toLowerCase().endsWith('.htm') ||
-         obj.ObjectName.toLowerCase().endsWith('.shtml') ||
-         obj.ObjectName.toLowerCase().endsWith('.shtm') ||
-         obj.ObjectName.toLowerCase().endsWith('.xhtml') ||
-         obj.ObjectName.toLowerCase().endsWith('.xht') ||
-         obj.ObjectName.toLowerCase().endsWith('.css') ||
-         obj.ObjectName.toLowerCase().endsWith('.js') ||
-         obj.ObjectName.toLowerCase().endsWith('.mjs') ||
-         obj.ObjectName.toLowerCase().endsWith('.md') ||
-         obj.ObjectName.toLowerCase().endsWith('.mdx') ||
-         obj.ObjectName.toLowerCase().endsWith('.jsx') ||
-         obj.ObjectName.toLowerCase().endsWith('.riot') ||
-         obj.ObjectName.toLowerCase().endsWith('.tag') ||
-         obj.ObjectName.toLowerCase().endsWith('.woff') ||
-         obj.ObjectName.toLowerCase().endsWith('.woff2') ||
-         obj.ObjectName.toLowerCase().endsWith('.ttf') ||
-         obj.ObjectName.toLowerCase().endsWith('.otf') ||
-         obj.ObjectName.toLowerCase().endsWith('.png') ||
-         obj.ObjectName.toLowerCase().endsWith('.jpg') ||
-         obj.ObjectName.toLowerCase().endsWith('.jpeg') ||
-         obj.ObjectName.toLowerCase().endsWith('.gif') ||
-         obj.ObjectName.toLowerCase().endsWith('.webp') ||
-         obj.ObjectName.toLowerCase().endsWith('.svg') ||
-         obj.ObjectName.toLowerCase().endsWith('.svgz') ||
-         obj.ObjectName.toLowerCase().endsWith('.ico') ||
-         obj.ObjectName.toLowerCase().endsWith('.avif') ||
-         obj.ObjectName.toLowerCase().endsWith('.heic') ||
-         obj.ObjectName.toLowerCase().endsWith('.heif') ||
-         obj.ObjectName.toLowerCase().endsWith('.bmp') ||
-         obj.ObjectName.toLowerCase().endsWith('.tiff') ||
-         obj.ObjectName.toLowerCase().endsWith('.tif') ||
-         obj.ObjectName.toLowerCase().endsWith('.mp4') ||
-         obj.ObjectName.toLowerCase().endsWith('.webm') ||
-         obj.ObjectName.toLowerCase().endsWith('.mp3') ||
-         obj.ObjectName.toLowerCase().endsWith('.wav') ||
-         obj.ObjectName.toLowerCase().endsWith('.mid') ||
-         obj.ObjectName.toLowerCase().endsWith('.midi') ||
-         obj.ObjectName.toLowerCase().endsWith('.ogg') ||
-         obj.ObjectName.toLowerCase().endsWith('.ogv') ||
-         obj.ObjectName.toLowerCase().endsWith('.mov') ||
-         obj.ObjectName.toLowerCase().endsWith('.qt') ||
-         obj.ObjectName.toLowerCase().endsWith('.glb') ||
-         obj.ObjectName.toLowerCase().endsWith('.gltf') ||
-         obj.ObjectName.toLowerCase().endsWith('.txt') ||
-         obj.ObjectName.toLowerCase().endsWith('.json') ||
-         obj.ObjectName.toLowerCase().endsWith('.xml') ||
-         obj.ObjectName.toLowerCase().endsWith('.csv') ||
-         obj.ObjectName.toLowerCase().endsWith('.tsv') ||
-         obj.ObjectName.toLowerCase().endsWith('.yaml') ||
-         obj.ObjectName.toLowerCase().endsWith('.yml') ||
-         obj.ObjectName.toLowerCase().endsWith('.ini') ||
-         obj.ObjectName.toLowerCase().endsWith('.conf') ||
-         obj.ObjectName.toLowerCase().endsWith('.properties') ||
-         obj.ObjectName.toLowerCase().endsWith('.env') ||
-         obj.ObjectName.toLowerCase().endsWith('.rss') ||
-         obj.ObjectName.toLowerCase().endsWith('.atom') ||
-         obj.ObjectName.toLowerCase().endsWith('.rdf') ||
-         obj.ObjectName.toLowerCase().endsWith('.zip') ||
-         obj.ObjectName.toLowerCase().endsWith('.tar') ||
-         obj.ObjectName.toLowerCase().endsWith('.tgz') ||
-         obj.ObjectName.toLowerCase().endsWith('.gz') ||
-         obj.ObjectName.toLowerCase().endsWith('.bz2') ||
-         obj.ObjectName.toLowerCase().endsWith('.xz') ||
-         obj.ObjectName.toLowerCase().endsWith('.7z') ||
-         obj.ObjectName.toLowerCase().endsWith('.pdf') ||
-         obj.ObjectName.toLowerCase().endsWith('.webmanifest') ||
-         obj.ObjectName.toLowerCase().endsWith('.map'))
-      );
-
-      // Filter for image/video files to scan with Arachnid Shield
-      const shieldFiles = allowedFiles.filter(obj =>
-        obj.ObjectName.toLowerCase().endsWith('.png') ||
-        obj.ObjectName.toLowerCase().endsWith('.jpg') ||
-        obj.ObjectName.toLowerCase().endsWith('.jpeg') ||
-        obj.ObjectName.toLowerCase().endsWith('.gif') ||
-        obj.ObjectName.toLowerCase().endsWith('.webp') ||
-        obj.ObjectName.toLowerCase().endsWith('.bmp') ||
-        obj.ObjectName.toLowerCase().endsWith('.tiff') ||
-        obj.ObjectName.toLowerCase().endsWith('.tif') ||
-        obj.ObjectName.toLowerCase().endsWith('.ico') ||
-        obj.ObjectName.toLowerCase().endsWith('.avif') ||
-        obj.ObjectName.toLowerCase().endsWith('.heic') ||
-        obj.ObjectName.toLowerCase().endsWith('.heif') ||
-        obj.ObjectName.toLowerCase().endsWith('.mp4') ||
-        obj.ObjectName.toLowerCase().endsWith('.webm') ||
-        obj.ObjectName.toLowerCase().endsWith('.mov') ||
-        obj.ObjectName.toLowerCase().endsWith('.qt') ||
-        obj.ObjectName.toLowerCase().endsWith('.ogv') ||
-        obj.ObjectName.toLowerCase().endsWith('.mid') ||
-        obj.ObjectName.toLowerCase().endsWith('.midi') ||
-        obj.ObjectName.toLowerCase().endsWith('.mp3') ||
-        obj.ObjectName.toLowerCase().endsWith('.wav') ||
-        obj.ObjectName.toLowerCase().endsWith('.ogg') ||
-        obj.ObjectName.toLowerCase().endsWith('.glb') ||
-        obj.ObjectName.toLowerCase().endsWith('.gltf')
-      );
-
-      // Define shield file extensions (images, videos, audio, 3D models)
-      const shieldExtensions = [
-        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
-        '.tiff', '.tif', '.ico', '.avif', '.heic', '.heif',
-        '.mp4', '.webm', '.mov', '.qt', '.ogv',
-        '.mid', '.midi', '.mp3', '.wav', '.ogg',
-        '.glb', '.gltf'
-      ];
-
-      // Define text-based file extensions that should be scanned with GPT-OSS-Safeguard
-      const textExtensions = [
-        '.html', '.htm', '.shtml', '.shtm', '.xhtml', '.xht',
-        '.css', '.js', '.mjs', '.md', '.mdx', '.jsx', '.riot', '.tag',
-        '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
-        '.ini', '.conf', '.properties', '.env', '.rss', '.atom', '.rdf',
-        '.webmanifest', '.map', '.svg'
-      ];
-
-      // Define file extensions for Llama Guard (all text + images, no archives/videos)
-      const llamaGuardExtensions = [
-        '.html', '.htm', '.shtml', '.shtm', '.xhtml', '.xht',
-        '.css', '.js', '.mjs', '.md', '.mdx', '.jsx', '.riot', '.tag',
-        '.txt', '.json', '.xml', '.csv', '.tsv', '.yaml', '.yml',
-        '.ini', '.conf', '.properties', '.env', '.rss', '.atom', '.rdf',
-        '.webmanifest', '.map', '.svg',
-        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
-        '.tiff', '.tif', '.ico', '.avif', '.heic', '.heif'
-      ];
-
-      // Filter for files that should be scanned with Groq (text-based files)
-      const groqFiles = allowedFiles.filter(obj => {
-        const ext = '.' + obj.ObjectName.toLowerCase().split('.').pop();
-        return textExtensions.includes(ext);
-      });
-
-      // Filter for files that should be scanned with Llama Guard (text files and images)
-      const llamaGuardFiles = allowedFiles.filter(obj => {
-        const ext = '.' + obj.ObjectName.toLowerCase().split('.').pop();
-        return llamaGuardExtensions.includes(ext);
-      });
-
-      reporter.info(`    Total allowed files found: ${allowedFiles.length}`);
-
-      // Scan files that should be scanned with GPT-OSS-Safeguard (text-based files)
-      if (runSafeguardScan && groqFiles.length > 0) {
-        userReporter.info(`    Text-based files found (GPT-OSS-Safeguard): ${groqFiles.length}`);
-
-        for (let i = 0; i < groqFiles.length; i++) {
-          const file = groqFiles[i];
-
-          try {
-            const { content: fileContent, etag } = await fetchFileContentWithEtag(file.ObjectName, userReporter, args['no-cache']);
-
-            // Use the generic scanning function with Safeguard handler
-            const safeguardHandler = new SafeguardHandler();
-            await genericScan(safeguardHandler, fileContent, false, 'safeguard', file.ObjectName, userReporter, !args['no-cache']);
-
-            // Add a delay between file processing to avoid rate limiting
-            if (i < groqFiles.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-            }
-          } catch (error) {
-            userReporter.error(file.ObjectName, error);
-          }
-        }
-      } else if (runSafeguardScan) {
-        userReporter.info("    No text-based files found for GPT-OSS-Safeguard");
-      }
-
-      // Scan files with Llama Guard
-      if (runLlamaGuardScan && llamaGuardFiles.length > 0) {
-        userReporter.info(`    Text and image files found (Llama Guard): ${llamaGuardFiles.length}`);
-
-        for (let i = 0; i < llamaGuardFiles.length; i++) {
-          const file = llamaGuardFiles[i];
-
-          // Determine if the file is an image based on its extension
-          const isImageUrl = shieldExtensions.some(ext => file.ObjectName.toLowerCase().endsWith(ext));
-
-          try {
-            let contentForLlamaGuard: string;
-
-            if (isImageUrl) {
-              contentForLlamaGuard = buildFileUrl(file.ObjectName); // For images, pass the URL
-            } else {
-              const { content, etag } = await fetchFileContentWithEtag(file.ObjectName, userReporter, args['no-cache']); // For text, fetch content
-              contentForLlamaGuard = content;
-            }
-
-            // Use the generic scanning function with Guard handler
-            const guardHandler = new GuardHandler();
-            await genericScan(guardHandler, contentForLlamaGuard, isImageUrl, 'guard', file.ObjectName, userReporter, !args['no-cache']);
-
-            // Add a delay between file processing to avoid rate limiting
-            if (i < llamaGuardFiles.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-            }
-          } catch (error) {
-            userReporter.error(file.ObjectName, error);
-          }
-        }
-      } else if (runLlamaGuardScan) {
-        userReporter.info("    No text or image files found for Llama Guard");
-      }
-
-      // Scan files with Explain functionality
-      if (runExplainScan && llamaGuardFiles.length > 0) {
-        userReporter.info(`    Text and image files found for explanation: ${llamaGuardFiles.length}`);
-
-        for (let i = 0; i < llamaGuardFiles.length; i++) {
-          const file = llamaGuardFiles[i];
-
-          // Determine if the file is an image based on its extension
-          const isImageUrl = shieldExtensions.some(ext => file.ObjectName.toLowerCase().endsWith(ext));
-
-          try {
-            let contentForExplain: string;
-
-            if (isImageUrl) {
-              contentForExplain = buildFileUrl(file.ObjectName); // For images, pass the URL
-            } else {
-              const { content, etag } = await fetchFileContentWithEtag(file.ObjectName, userReporter, args['no-cache']); // For text, fetch content
-              contentForExplain = content;
-            }
-
-            // Use the generic scanning function with Explain handler
-            const explainHandler = new ExplainHandler();
-            const scanResult = await genericScan(explainHandler, contentForExplain, isImageUrl, 'explain', file.ObjectName, userReporter, !args['no-cache']);
-
-            if (scanResult.hasViolation) {
-              userReporter.error(file.ObjectName, scanResult.result);
-            } else {
-              userReporter.info(`  Explanation for ${file.ObjectName}:\n${scanResult.result}`);
-            }
-
-            // Add a delay between file processing to avoid rate limiting
-            if (i < llamaGuardFiles.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-            }
-          } catch (error) {
-            userReporter.error(file.ObjectName, error);
-          }
-        }
-      } else if (runExplainScan) {
-        userReporter.info("    No text or image files found for explanation");
-      }
-
-      // Scan files with Arachnid Shield
-      if (runShieldScan && shieldFiles.length > 0) {
-        userReporter.info(`    Media files found: ${shieldFiles.length}`);
-
-        for (const shieldFile of shieldFiles) {
-          try {
-            // Build the file URL using the buildFileUrl function to handle special characters
-            const fileUrl = buildFileUrl(shieldFile.ObjectName);
-
-            // For Arachnid Shield, we use URL-based hashing for the cache instead of content-based hashing
-            const urlHash = computeContentHash(fileUrl);
-
-            // Check if this URL has already been scanned and found safe by Arachnid Shield (only if cache is enabled)
-            if (!args['no-cache'] && checkCachedScan(urlHash, 'shield')) {
-              userReporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
-
-              // If verbose mode is enabled, show the cached response
-              const cachedResponse = await readCachedResponse(urlHash, 'shield');
-              if (userReporter.verbose && cachedResponse) {
-                userReporter.verboseInfo(`        Cached ARACHNID SHIELD Response:\n${cachedResponse}`);
-              }
-              continue; // Skip scanning since it's already been checked and found safe
-            }
-
-            const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, userReporter);
-
-            if (scanResult.status === 'ok' && scanResult.data.is_match) {
-              const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
-              userReporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
-            } else if (scanResult.status === 'ok') {
-              userReporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
-              // Save the full API response to cache since the content is safe
-              saveScanToCache(urlHash, 'shield', JSON.stringify(scanResult));
-            } else { // status is 'err' (already handled by catch, but good for explicit logic)
-              userReporter.error(shieldFile.ObjectName, scanResult.data);
-            }
-          } catch (error) {
-            userReporter.error(shieldFile.ObjectName, error);
-          }
-        }
-      } else if (runShieldScan) {
-        userReporter.info("    No media files found");
-      }
-
-      // Output username if violations-only mode and this user had violations
-      if (args['violations-only'] && userHasViolations) {
-        console.log(`. ${dir.ObjectName}/`);
-      }
-
-      userReporter.info(""); // Add a blank line for readability between users
-    }
-  } else {
-    console.log("No username folders found.");
   }
 }
 
+function setupConsoleDepthAndReporter(args: any): Reporter {
+  const bunConsoleDepth = (globalThis as any).Bun?.consoleDepth || (globalThis as any).console?.depth || 2;
+  const argConsoleDepth = args['console-depth'] !== undefined ? parseInt(args['console-depth']) : null;
+  const baseConsoleDepth = argConsoleDepth !== null ? argConsoleDepth : bunConsoleDepth;
+  const adjustedConsoleDepth = args.verbose ? Math.max(baseConsoleDepth, 8) : baseConsoleDepth;
 
+  (console as any).depth = adjustedConsoleDepth;
 
-// Only run main if this file is executed directly (not imported)
+  return createReporter({
+    verbose: args.verbose,
+    violationsOnly: args['violations-only'],
+    depth: adjustedConsoleDepth
+  });
+}
+
+async function scanUser(
+  user: any,
+  reporter: Reporter,
+  scanConfig: { shield: boolean, safeguard: boolean, guard: boolean, explain: boolean },
+  noCache: boolean
+): Promise<boolean> {
+  let userHasViolations = false;
+
+  const userReporter = createReporter({
+    verbose: reporter.verbose,
+    violationsOnly: reporter.violationsOnly,
+    depth: reporter.depth,
+    onViolation: () => { userHasViolations = true; }
+  });
+
+  if (!reporter.violationsOnly) {
+    console.log(`. ${user.ObjectName}/`);
+  }
+
+  const folderObjects = await getAllObjectsRecursively(`/${user.ObjectName}/`);
+  const allFiles = filterFilesByType(folderObjects, 'all');
+  userReporter.info(`    Total allowed files found: ${allFiles.length}`);
+
+  // Safeguard scan (text files)
+  if (scanConfig.safeguard) {
+    const textFiles = filterFilesByType(folderObjects, 'text');
+    await scanFilesWithHandler(
+      textFiles,
+      new SafeguardHandler(),
+      'GPT-OSS-Safeguard',
+      'safeguard',
+      userReporter,
+      !noCache,
+      noCache
+    );
+  }
+
+  // Llama Guard scan (text + images)
+  if (scanConfig.guard) {
+    const llamaGuardFiles = filterFilesByType(folderObjects, 'llamaGuard');
+    await scanFilesWithHandler(
+      llamaGuardFiles,
+      new GuardHandler(),
+      'Llama Guard',
+      'guard',
+      userReporter,
+      !noCache,
+      noCache
+    );
+  }
+
+  // Explain scan
+  if (scanConfig.explain) {
+    const llamaGuardFiles = filterFilesByType(folderObjects, 'llamaGuard');
+    const explainFiles = llamaGuardFiles;
+
+    if (explainFiles.length > 0) {
+      userReporter.info(`    Files found for explanation: ${explainFiles.length}`);
+
+      for (let i = 0; i < explainFiles.length; i++) {
+        const file = explainFiles[i];
+        const isImageUrl = matchesExtensions(file.ObjectName, FILE_EXTENSIONS.shield);
+
+        try {
+          const explainHandler = new ExplainHandler();
+          // Pass filePath - genericScan will check cache first, only fetch if needed
+          const scanResult = await genericScan(explainHandler, file.ObjectName, isImageUrl, 'explain', userReporter, !noCache, noCache);
+
+          if (scanResult.hasViolation) {
+            userReporter.error(file.ObjectName, scanResult.result);
+          } else {
+            userReporter.info(`  Explanation for ${file.ObjectName}:\n${scanResult.result}`);
+          }
+
+          // Only delay if scanner actually made an API call (cache miss)
+          if (i < explainFiles.length - 1 && scanResult.apiCallMade) {
+            userReporter.verboseInfo(`  Waiting ${CONFIG.rateLimiting.delayBetweenFilesMs/1000}s before next file (rate limiting)`);
+            await new Promise(resolve => setTimeout(resolve, CONFIG.rateLimiting.delayBetweenFilesMs));
+          }
+        } catch (error) {
+          userReporter.error(file.ObjectName, error);
+        }
+      }
+    } else {
+      userReporter.info("    No files found for explanation");
+    }
+  }
+
+  // Shield scan (media files)
+  if (scanConfig.shield) {
+    const shieldFiles = filterFilesByType(folderObjects, 'shield');
+
+    if (shieldFiles.length > 0) {
+      userReporter.info(`    Media files found: ${shieldFiles.length}`);
+
+      for (const shieldFile of shieldFiles) {
+        try {
+          const fileUrl = buildFileUrl(shieldFile.ObjectName);
+          const urlHash = computeContentHash(fileUrl);
+
+          if (!noCache && cacheManager.checkScan(urlHash, 'shield')) {
+            userReporter.info(`  ${shieldFile.ObjectName}: ARACHNID SHIELD OK (cached)`);
+
+            const cachedResponse = await cacheManager.readScanResponse(urlHash, 'shield');
+            if (userReporter.verbose && cachedResponse) {
+              userReporter.verboseInfo(`        Cached ARACHNID SHIELD Response:\n${cachedResponse}`);
+            }
+            continue;
+          }
+
+          const scanResult = await scanImageWithArachnidShieldFromUrl(fileUrl, userReporter);
+
+          if (scanResult.status === 'ok' && scanResult.data.is_match) {
+            const classificationDetails = scanResult.data.classification ? `Classification: ${scanResult.data.classification}` : 'No classification provided.';
+            userReporter.violation(shieldFile.ObjectName, 'ARACHNID SHIELD CSAM', classificationDetails);
+          } else if (scanResult.status === 'ok') {
+            userReporter.ok(shieldFile.ObjectName, 'ARACHNID SHIELD');
+            cacheManager.saveScan(urlHash, 'shield', JSON.stringify(scanResult));
+          } else {
+            userReporter.error(shieldFile.ObjectName, scanResult.data);
+          }
+        } catch (error) {
+          userReporter.error(shieldFile.ObjectName, error);
+        }
+      }
+    } else {
+      userReporter.info("    No media files found");
+    }
+  }
+
+  // Output username if violations-only mode and this user had violations
+  if (reporter.violationsOnly && userHasViolations) {
+    console.log(`. ${user.ObjectName}/`);
+  }
+
+  userReporter.info("");
+  return userHasViolations;
+}
+
+// ============================================================================
+// MAIN FUNCTION
+// ============================================================================
+
+async function main() {
+  // Pre-check for help
+  if (Bun.argv.includes('--help')) {
+    showHelp();
+    process.exit(0);
+  }
+
+  // Parse arguments
+  const { values: args } = parseArgs({
+    args: Bun.argv.slice(2),
+    options: CONFIG.cli.argsConfig,
+    strict: true
+  });
+
+  // Handle help
+  if (args.help) {
+    showHelp();
+    return;
+  }
+
+  // Handle list-users
+  if (args['list-users']) {
+    await listUsers();
+    return;
+  }
+
+  // Determine which scans to run
+  const anyScanFlags = args.shield || args.safeguard || args.guard || args.explain;
+  const scanConfig = {
+    shield: !anyScanFlags || args.shield,
+    safeguard: !anyScanFlags || args.safeguard,
+    guard: !anyScanFlags || args.guard,
+    explain: !!args.explain
+  };
+
+  // Setup reporter
+  const reporter = setupConsoleDepthAndReporter(args);
+
+  console.log(`Fetching contents of storage zone: ${STORAGE_ZONE_NAME}\n`);
+
+  // Get user folders
+  const userFolders = await getUserFolders(args.user);
+
+  if (userFolders.length === 0) {
+    console.log("No username folders found.");
+    return;
+  }
+
+  if (!args['violations-only']) {
+    console.log("Username Folders (Directories):");
+    console.log("===============================");
+  }
+
+  // Scan each user
+  for (const user of userFolders) {
+    await scanUser(user, reporter, scanConfig, args['no-cache']);
+  }
+}
+
+// ============================================================================
+// SCRIPT EXECUTION
+// ============================================================================
+
 if (process.argv[1] === import.meta.path) {
   main();
 }
