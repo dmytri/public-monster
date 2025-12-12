@@ -2,7 +2,7 @@
 import * as FilePath from 'path';
 import { storagePath } from '../../utils/paths';
 import { MAX_FILE_SIZE, ALLOWED_EXTENSIONS, isShieldScannableFile } from '../../utils/config';
-import { ArachnidShield } from '../../vendor/arachnid-shield-sdk/src/index';
+import { ArachnidShield } from 'arachnid-shield-sdk/src/index';
 
 export async function listFilesRecursive(
   path: string,
@@ -195,8 +195,20 @@ export async function getFileContentHandler(
 ): Promise<Response> {
   const { username } = user;
 
-  // Extract the file path from URL parameters - the route is now "/api/files/content/*"
+  // Check raw URL for path traversal BEFORE URL normalization
+  // This catches traversal attempts in the route parameter
+  const rawUrl = req.url;
   const url = new URL(req.url);
+
+  if (rawUrl.includes('/../') ||
+      rawUrl.includes('/..') ||
+      rawUrl.includes('%2e%2e') ||
+      rawUrl.includes('..%2f') ||
+      rawUrl.includes('%2f..')) {
+    return new Response("Invalid file path", { status: 400 });
+  }
+
+  // Extract the file path from URL parameters - the route is now "/api/files/content/*"
   const pathname = url.pathname;
 
   // Extract the file path part after "/api/files/content/"
@@ -211,12 +223,8 @@ export async function getFileContentHandler(
     return new Response("File path not specified", { status: 400 });
   }
 
-  // Validate the file path to prevent directory traversal
-  if (filePath.includes('../') || filePath.startsWith('../') || filePath.includes('/..') || filePath === '..') {
-    return new Response("Invalid file path", { status: 400 });
-  }
-
   // Use the authenticated user's username to construct the storage path
+  // storagePath() will throw InvalidPathError for additional validation
   const normalizedPath = await storagePath(username, filePath);
 
   try {

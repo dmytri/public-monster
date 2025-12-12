@@ -15,7 +15,7 @@ describe("Server Smoke Tests", () => {
 
   test("File upload works", async () => {
     const form = new FormData();
-    form.append("file", new Blob(['test content']));
+    form.append("file", new Blob(['test content']), "smoke-test.txt");
     form.append("path", 'smoke-test.txt');
 
     const res = await fetch(`${BASE_URL}/api/files`, {

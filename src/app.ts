@@ -151,7 +151,7 @@ export function startServer(port: number = 3000, test: Record<string, string | n
 
         // Only allow specific assets for security
         if (!assetPath.startsWith('prismjs/') && !assetPath.startsWith('escape-html/') && !assetPath.startsWith('htmlhint/') && !assetPath.startsWith('@teamhanko/hanko-elements/')) {
-          return new Response("Not found", { status: 404 });
+          return serve404Page(HANKO_API_URL);
         }
 
         const filePath = `./node_modules/${assetPath}`;
@@ -176,6 +176,54 @@ export function startServer(port: number = 3000, test: Record<string, string | n
     async fetch(req) {
       const url = new URL(req.url);
 
+      // Check for path traversal BEFORE any routing happens
+      // Check both the raw URL and the pathname for various traversal patterns
+      const rawUrl = req.url;
+      const pathname = url.pathname;
+
+      // Check for path traversal patterns
+      // Note: By the time we receive the URL, fetch() has already normalized it client-side
+      // For example, /api/files/content/../../../etc/passwd becomes /etc/passwd
+      // We detect this by checking for:
+      // 1. Encoded traversal sequences in the raw URL
+      // 2. Literal .. components in the pathname
+      // 3. Paths that look like traversal results (outside our expected paths)
+      const hasEncodedTraversal = rawUrl.includes('%2e%2e') || rawUrl.includes('..%2f') || rawUrl.includes('%2f..');
+      const hasLiteralDots = pathname.includes('/..') || pathname.includes('\\..') || pathname === '..' || pathname.endsWith('/..');
+
+      // Detect paths that are likely traversal results
+      // Check for obvious system paths
+      const isSystemPath = pathname.startsWith('/etc/') ||
+                          pathname.startsWith('/usr/') ||
+                          pathname.startsWith('/home/') ||
+                          pathname.startsWith('/root/') ||
+                          pathname.startsWith('/var/') ||
+                          pathname.startsWith('/sys/') ||
+                          pathname.startsWith('/proc/');
+
+      // Check for partial traversals that landed in API space
+      // Valid /api/files paths are: /api/files, /api/files/content/*, /api/files/zip
+      const isInvalidApiFilesPath = pathname.startsWith('/api/files/') &&
+                                     !pathname.startsWith('/api/files/content/') &&
+                                     pathname !== '/api/files/zip';
+
+      const isPartialTraversal = pathname.includes('/api/etc/') ||  // /api/etc/hosts
+                                 pathname === '/api/files/' ||  // /api/files/content/.. → /api/files/
+                                 pathname === '/api/' ||  // /api/files/content/../../.. → /api/
+                                 isInvalidApiFilesPath ||  // /api/files/secrets.txt (traversal result)
+                                 (pathname.startsWith('/api/files/') && pathname.includes('/.')); // /api/files/.ssh/id_rsa
+
+      // Check for hidden/dot files in suspicious locations
+      const hasSuspiciousDotFile = pathname.includes('/.ssh/') ||
+                                   pathname.includes('/.env') ||
+                                   pathname.includes('/.git');
+
+      const isLikelySuspicious = isSystemPath || isPartialTraversal || hasSuspiciousDotFile;
+
+      if (hasEncodedTraversal || hasLiteralDots || isLikelySuspicious) {
+        return new Response("Invalid file path", { status: 400 });
+      }
+
       if (url.pathname.startsWith('/~')) {
         return Response.redirect(`${BUNNY_PULL_ZONE}${url.pathname}`, 303);
       }
@@ -187,12 +235,8 @@ export function startServer(port: number = 3000, test: Record<string, string | n
 
       // Try to serve static files from the public directory
       // Only serve files that don't match existing routes
-      // Security: Prevent directory traversal
+      // Path traversal is already checked at the top of fetch()
       const requestedPath = url.pathname;
-      // Check for directory traversal
-      if (requestedPath.includes('../') || requestedPath.includes('..\\')) {
-        return serve404Page(HANKO_API_URL);
-      }
 
       const staticFilePath = `./public${requestedPath}`;
       const file = Bun.file(staticFilePath);

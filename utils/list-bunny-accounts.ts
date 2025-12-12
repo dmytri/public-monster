@@ -1,4 +1,4 @@
-import { ArachnidShield } from "../vendor/arachnid-shield-sdk/src/index";
+import { ArachnidShield } from "arachnid-shield-sdk/src/index";
 import { parseArgs } from "util";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
