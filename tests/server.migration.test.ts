@@ -46,7 +46,7 @@ describe("API: Migration", () => {
     });
 
     // 2. Prepare migration as the old user
-    const prepareRes = await fetch(`${BASE_URL}/api/prepare-migration`)
+    const prepareRes = await fetch(`${BASE_URL}/api/prepare-migration`, { method: 'POST' })
     expect(prepareRes.status).toBe(200);
 
     // 3. Perform migration as the new user

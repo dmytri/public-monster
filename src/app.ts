@@ -69,18 +69,6 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       },
 
 
-      // API: Get user info
-      "/api/whoami": {
-        GET: requireAuth(async (req, user) => {
-          return new Response(JSON.stringify({
-            userid: user.userid,
-            username: user.username
-          }), {
-            headers: { "Content-Type": "application/json" }
-          });
-        }, HANKO_API_URL)
-      },
-
       // API: Download all files as zip
       "/api/files/zip": {
         GET: requireAuth(async (req, user) => {
@@ -89,7 +77,7 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       },
 
       "/api/prepare-migration": {
-        GET: requireAuth(async (req, user) => {
+        POST: requireAuth(async (req, user) => {
           return prepareMigrationHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
         }, HANKO_API_URL)
       },

@@ -6,20 +6,6 @@ const BASE_URL = `http://localhost:${TEST_PORT}`;
 setupTestHooks({'username': TEST_USERNAME}, TEST_PORT);
 
 describe("Endpoint Security Tests", () => {
-  describe("GET /api/whoami", () => {
-    test("Returns authenticated user info", async () => {
-      const res = await fetch(`${BASE_URL}/api/whoami`);
-
-      expect(res.status).toBe(200);
-      expect(res.headers.get("Content-Type")).toBe("application/json");
-
-      const data = await res.json();
-      expect(data).toHaveProperty("userid");
-      expect(data).toHaveProperty("username");
-      expect(data.username).toBe(TEST_USERNAME);
-    });
-  });
-
   describe("GET /api/files/content/*", () => {
     test("Returns file content for existing file", async () => {
       // Upload a test file first
