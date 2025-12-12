@@ -1,7 +1,8 @@
 /// <reference types="bun-types" />
 import * as FilePath from 'path';
 import { storagePath } from '../../utils/paths';
-import { MAX_FILE_SIZE, ALLOWED_EXTENSIONS } from '../../utils/config';
+import { MAX_FILE_SIZE, ALLOWED_EXTENSIONS, isShieldScannableFile } from '../../utils/config';
+import { ArachnidShield } from '../../vendor/arachnid-shield-sdk/src/index';
 
 export async function listFilesRecursive(
   path: string,
@@ -33,12 +34,64 @@ export async function listFilesRecursive(
   return allFiles;
 }
 
+async function scanFileWithShield(
+  file: File,
+  filename: string
+): Promise<{ safe: boolean; reason?: string; fileData?: Uint8Array }> {
+  try {
+    // Read file into memory ONCE
+    // (We need the bytes for both Shield and Bunny upload)
+    const buffer = await file.arrayBuffer();
+    const contents = new Uint8Array(buffer);
+
+    // Create Shield client
+    const shield = new ArachnidShield(
+      process.env.ARACHNID_API_USERNAME!,
+      process.env.ARACHNID_API_PASSWORD!
+    );
+
+    // Scan file with Shield FIRST (before any storage)
+    const scanResult = await shield.scanMediaFromBytes(
+      contents,
+      file.type || undefined,
+      file.size
+    );
+
+    // Check result
+    if (scanResult.status === 'err') {
+      console.error(`Shield scan error for ${filename}:`, scanResult.data);
+      // On Shield API error, allow upload (fail open)
+      return { safe: true, fileData: contents };
+    }
+
+    if (scanResult.data.is_match) {
+      const classification = scanResult.data.classification || 'unknown';
+      console.warn(`Shield BLOCK: ${filename} - ${classification}`);
+      // Do NOT return fileData - file is blocked
+      return {
+        safe: false,
+        reason: `Content flagged by safety scanner: ${classification}`
+      };
+    }
+
+    // File is safe - return it for upload
+    return { safe: true, fileData: contents };
+
+  } catch (error) {
+    console.error(`Shield scan exception for ${filename}:`, error);
+    // On exception, allow upload (fail open to prevent DOS)
+    // Still need fileData for upload
+    const buffer = await file.arrayBuffer();
+    return { safe: true, fileData: new Uint8Array(buffer) };
+  }
+}
+
 type UserInfo = { userid: string; username: string };
 
 export async function uploadFileHandler(
-  req: Bun.BunRequest, 
-  user: UserInfo, 
-  BUNNY_STORAGE_URL: string, 
+  req: Bun.BunRequest,
+  user: UserInfo,
+  BUNNY_STORAGE_URL: string,
   BUNNY_API_KEY: string
 ): Promise<Response> {
   const form = await req.formData();
@@ -58,14 +111,35 @@ export async function uploadFileHandler(
     return new Response("File type not allowed", { status: 403 });
   }
 
-  async function uploadToBunny(targetPath: string, blob: Blob) {
+  // ====== NEW: Shield Scanning BEFORE Storage ======
+  let fileDataToUpload: File | Uint8Array = file;
+
+  if (isShieldScannableFile(file.name)) {
+    const scanResult = await scanFileWithShield(file, file.name);
+
+    if (!scanResult.safe) {
+      // File is flagged - NEVER stored anywhere
+      return new Response(
+        scanResult.reason || "Content blocked by safety scanner",
+        { status: 451 }  // 451 Unavailable For Legal Reasons
+      );
+    }
+
+    // File is safe - use the scanned bytes for upload (avoid re-reading)
+    if (scanResult.fileData) {
+      fileDataToUpload = scanResult.fileData;
+    }
+  }
+  // ====== END NEW ======
+
+  async function uploadToBunny(targetPath: string, blob: Blob | Uint8Array) {
     const uploadUrl = `${BUNNY_STORAGE_URL}${targetPath}`;
     const res = await fetch(uploadUrl, { method: "PUT", headers: { AccessKey: BUNNY_API_KEY }, body: blob });
     if (!res.ok) throw new Error("Upload failed");
   }
 
   try {
-    await uploadToBunny(targetPath, file);
+    await uploadToBunny(targetPath, fileDataToUpload);
     // Update etag after successful upload
     if (typeof globalThis.TEST === 'undefined') {
       const etagValue = Bun.hash(user.userid + Date.now());

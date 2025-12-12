@@ -75,7 +75,13 @@ form.addEventListener('submit', async (e) => {
       });
 
       if (!res.ok) {
-        status.textContent = `❌ Upload failed (${count}/${files.length}): ${file.name}`;
+        // Handle content blocked by safety scanner (HTTP 451)
+        if (res.status === 451) {
+          const message = await res.text();
+          status.textContent = `🚫 Upload blocked (${count}/${files.length}): ${file.name} - ${message}`;
+        } else {
+          status.textContent = `❌ Upload failed (${count}/${files.length}): ${file.name}`;
+        }
         // Re-enable the upload button on failure
         uploadButton.disabled = false;
         uploadButton.textContent = '🚀 Upload';

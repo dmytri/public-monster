@@ -8,16 +8,20 @@ export function validateEnvironmentVariables() {
   const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
   const BUNNY_API_KEY = process.env.BUNNY_API_KEY;
   const HANKO_API_URL = process.env.HANKO_API_URL;
+  const ARACHNID_API_USERNAME = process.env.ARACHNID_API_USERNAME;
+  const ARACHNID_API_PASSWORD = process.env.ARACHNID_API_PASSWORD;
 
-  if (!HANKO_API_URL || !BUNNY_STORAGE_URL || !BUNNY_API_KEY) {
-    throw new Error("Missing required environment variables: HANKO_API_URL, BUNNY_STORAGE_URL, BUNNY_API_KEY");
+  if (!HANKO_API_URL || !BUNNY_STORAGE_URL || !BUNNY_API_KEY || !ARACHNID_API_USERNAME || !ARACHNID_API_PASSWORD) {
+    throw new Error("Missing required environment variables: HANKO_API_URL, BUNNY_STORAGE_URL, BUNNY_API_KEY, ARACHNID_API_USERNAME, ARACHNID_API_PASSWORD");
   }
 
   return {
     BUNNY_PULL_ZONE,
     BUNNY_STORAGE_URL,
     BUNNY_API_KEY,
-    HANKO_API_URL
+    HANKO_API_URL,
+    ARACHNID_API_USERNAME,
+    ARACHNID_API_PASSWORD
   };
 }
 
@@ -62,3 +66,21 @@ export const ALLOWED_EXTENSIONS = [
   // manifests / maps
   '.webmanifest', '.map'
 ];
+
+// Shield scannable file extensions (media types for CSAM detection)
+export const SHIELD_SCANNABLE_EXTENSIONS = [
+  // images
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
+  '.tiff', '.tif', '.ico', '.avif', '.heic', '.heif',
+  // videos
+  '.mp4', '.webm', '.mov', '.qt', '.ogv',
+  // audio
+  '.mp3', '.wav', '.mid', '.midi', '.ogg',
+  // 3D models
+  '.glb', '.gltf'
+];
+
+export function isShieldScannableFile(filename: string): boolean {
+  const ext = filename.toLowerCase().match(/\.[^.]+$/)?.[0];
+  return ext ? SHIELD_SCANNABLE_EXTENSIONS.includes(ext) : false;
+}
