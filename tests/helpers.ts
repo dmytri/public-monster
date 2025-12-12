@@ -60,8 +60,18 @@ export async function teardownTestServer(port: number = TEST_PORT): Promise<void
 }
 
 // --- Test Hooks Setup ---
+// Store original console methods to restore after tests
+let originalConsoleError: typeof console.error;
+let originalConsoleWarn: typeof console.warn;
+
 export function setupTestHooks(testConfig: Record<string, string | number | boolean> = {'username': TEST_USERNAME}, port: number = TEST_PORT): void {
   beforeAll(async () => {
+    // Suppress noisy console output during tests (Shield errors, etc.)
+    originalConsoleError = console.error;
+    originalConsoleWarn = console.warn;
+    console.error = () => {};
+    console.warn = () => {};
+
     setupTestServer(testConfig, port);
     await waitForServer();
   });
@@ -73,6 +83,10 @@ export function setupTestHooks(testConfig: Record<string, string | number | bool
   afterAll(async () => {
     await cleanupUserFiles(port);
     await teardownTestServer(port);
+
+    // Restore console methods
+    console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
   });
 }
 

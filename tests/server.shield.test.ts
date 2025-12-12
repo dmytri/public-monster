@@ -21,7 +21,7 @@ describe("Shield CSAM Scanning Integration", () => {
       body: formData
     });
 
-    // Should succeed - safe image passes Shield scan
+    // Should succeed - safe image passes Shield scan (or fail-open if unreachable)
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("OK");
 

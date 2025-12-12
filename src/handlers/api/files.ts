@@ -37,52 +37,43 @@ export async function listFilesRecursive(
 async function scanFileWithShield(
   file: File,
   filename: string
-): Promise<{ safe: boolean; reason?: string; fileData?: Uint8Array }> {
-  try {
-    // Read file into memory ONCE
-    // (We need the bytes for both Shield and Bunny upload)
-    const buffer = await file.arrayBuffer();
-    const contents = new Uint8Array(buffer);
+): Promise<{ safe: boolean; reason?: string; fileData: Uint8Array }> {
+  // Read file into memory ONCE (before try-catch so it's available in catch)
+  const buffer = await file.arrayBuffer();
+  const contents = new Uint8Array(buffer);
 
-    // Create Shield client
+  try {
     const shield = new ArachnidShield(
       process.env.ARACHNID_API_USERNAME!,
       process.env.ARACHNID_API_PASSWORD!
     );
 
-    // Scan file with Shield FIRST (before any storage)
     const scanResult = await shield.scanMediaFromBytes(
       contents,
       file.type || undefined,
       file.size
     );
 
-    // Check result
     if (scanResult.status === 'err') {
       console.error(`Shield scan error for ${filename}:`, scanResult.data);
-      // On Shield API error, allow upload (fail open)
       return { safe: true, fileData: contents };
     }
 
     if (scanResult.data.is_match) {
       const classification = scanResult.data.classification || 'unknown';
       console.warn(`Shield BLOCK: ${filename} - ${classification}`);
-      // Do NOT return fileData - file is blocked
       return {
         safe: false,
-        reason: `Content flagged by safety scanner: ${classification}`
+        reason: `Content flagged by safety scanner: ${classification}`,
+        fileData: contents
       };
     }
 
-    // File is safe - return it for upload
     return { safe: true, fileData: contents };
 
   } catch (error) {
     console.error(`Shield scan exception for ${filename}:`, error);
-    // On exception, allow upload (fail open to prevent DOS)
-    // Still need fileData for upload
-    const buffer = await file.arrayBuffer();
-    return { safe: true, fileData: new Uint8Array(buffer) };
+    return { safe: true, fileData: contents };
   }
 }
 
