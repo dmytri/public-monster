@@ -7,7 +7,7 @@ declare global {
 
 type UserInfo = { userid: string; username: string };
 
-export async function getUserInfo(req: Bun.BunRequest, HANKO_API_URL: string): Promise<UserInfo> {
+export async function getUserInfo(req: Bun.BunRequest): Promise<UserInfo> {
   if (typeof globalThis.TEST !== 'undefined' && typeof globalThis.TEST.username == 'string')
     return { userid: 'TEST_USERID', username: globalThis.TEST.username };
 
@@ -15,6 +15,11 @@ export async function getUserInfo(req: Bun.BunRequest, HANKO_API_URL: string): P
 
   if (!token)
     throw new Error('No Auth Token Found');
+
+  const HANKO_API_URL = process.env.HANKO_API_URL;
+  if (!HANKO_API_URL) {
+    throw new Error('HANKO_API_URL environment variable not set');
+  }
 
   const meRes = await fetch(`${HANKO_API_URL}/me`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -42,9 +47,9 @@ type AuthedHandler = (
   user: UserInfo,
 ) => Promise<Response> | Response;
 
-export function requireAuth(handler: AuthedHandler, HANKO_API_URL: string) {
+export function requireAuth(handler: AuthedHandler) {
   return async (req: Bun.BunRequest): Promise<Response> => {
-    let user: UserInfo = await getUserInfo(req, HANKO_API_URL);
+    let user: UserInfo = await getUserInfo(req);
     return handler(req, user);
   };
 }

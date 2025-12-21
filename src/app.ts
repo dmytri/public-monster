@@ -2,7 +2,7 @@
 /* global Bun, process */
 
 import { validateEnvironmentVariables, MAX_FILE_SIZE, ALLOWED_EXTENSIONS } from './utils/config';
-import { requireAuth, getUserInfo } from './utils/auth';
+import { requireAuth } from './utils/auth';
 import { InvalidPathError } from './utils/paths';
 import {
   uploadFileHandler,
@@ -13,11 +13,10 @@ import {
 import { createStarterPageHandler } from './handlers/api/starter';
 import { prepareMigrationHandler, migrateUsernameHandler } from './handlers/api/migration';
 import { downloadZipHandler } from './handlers/api/zip';
-import { 
-  serveStaticPage, 
-  serve404Page, 
-  serveSocialCard,
-  serveUserFile
+import {
+  serveStaticPage,
+  serve404Page,
+  serveSocialCard
 } from './handlers/static';
 
 declare global {
@@ -45,27 +44,27 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       "/api/files": {
         POST: requireAuth(async (req, user) => {
           return uploadFileHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL),
+        }),
         GET: requireAuth(async (req, user) => {
           return listFilesHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL),
+        }),
         DELETE: requireAuth(async (req, user) => {
           return deleteFileHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
+        })
       },
 
       // API: Create starter page
       "/api/create-starter": {
         POST: requireAuth(async (req, user) => {
           return createStarterPageHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
+        })
       },
 
       // API: Get file content
       "/api/files/content/*": {
         GET: requireAuth(async (req, user) => {
           return getFileContentHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
+        })
       },
 
 
@@ -73,19 +72,19 @@ export function startServer(port: number = 3000, test: Record<string, string | n
       "/api/files/zip": {
         GET: requireAuth(async (req, user) => {
           return downloadZipHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
+        })
       },
 
       "/api/prepare-migration": {
         POST: requireAuth(async (req, user) => {
           return prepareMigrationHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
+        })
       },
 
       "/api/migrate-username": {
         POST: requireAuth(async (req, user) => {
           return migrateUsernameHandler(req, user, BUNNY_STORAGE_URL, BUNNY_API_KEY);
-        }, HANKO_API_URL)
+        })
       },
 
       "/": async () => {

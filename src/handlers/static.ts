@@ -46,12 +46,3 @@ export async function serveSocialCard(): Promise<Response> {
   return new Response(file, { headers: { "Content-Type": "image/png" } });
 }
 
-// User file serving
-export async function serveUserFile(pathname: string, BUNNY_PULL_ZONE: string, BUNNY_STORAGE_URL: string, BUNNY_API_KEY: string) {
-  const cdnUrl = `${BUNNY_PULL_ZONE}${pathname}`;
-  console.log('SERVER', `${new URL(cdnUrl).protocol}//${new URL(cdnUrl).hostname}`);
-  if (BUNNY_PULL_ZONE && BUNNY_PULL_ZONE !== `${new URL(cdnUrl).protocol}//${new URL(cdnUrl).hostname}`) {
-    return Response.redirect(cdnUrl, 303);
-  }
-  return new Response("Not found", { status: 404 });
-}
