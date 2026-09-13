@@ -21,8 +21,8 @@ const token = await hanko.getSessionToken();
 if (!token) {
   window.location.href = '/';
 } else {
-  const user = await hanko.getUser();
-  username = user.username;
+  const user = await hanko.getCurrentUser();
+  username = user.username.username;
   document.getElementById('username').textContent = username;
   loadFiles(token);
 }

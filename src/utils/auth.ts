@@ -25,21 +25,19 @@ export async function getUserInfo(req: Bun.BunRequest): Promise<UserInfo> {
     headers: { Authorization: `Bearer ${token}` }
   });
 
-  if (!meRes.ok) throw new Error('Failed to fetch user ID');
-  const { id } = await meRes.json();
+  if (!meRes.ok) throw new Error('Failed to fetch user');
+  const me = await meRes.json();
+  const id = me?.id;
+  const username = me?.username?.username;
 
-  const userRes = await fetch(`${HANKO_API_URL}/users/${id}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!userRes.ok) throw new Error('Failed to fetch user');
+  if (typeof id !== 'string' || !id)
+    throw new Error('Invalid user ID');
 
-  const user = await userRes.json();
-
-  if (!/^[a-zA-Z0-9_-]+$/.test(user.username)) {
+  if (typeof username !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(username)) {
     throw new Error('Invalid username')
   }
 
-  return Object.freeze({ userid: id as string, username: user.username as string });
+  return Object.freeze({ userid: id, username });
 }
 
 type AuthedHandler = (

@@ -36,8 +36,8 @@ const { hanko } = await register(window.HANKO_API_URL);
 const token = await hanko.getSessionToken();
 if (token) {
   window.hankoToken = token;
-  const user = await hanko.getUser();
-  const username = user.username;
+  const user = await hanko.getCurrentUser();
+  const username = user.username.username;
 
   // Get current path
   const path = window.location.pathname;

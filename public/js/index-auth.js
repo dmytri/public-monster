@@ -47,16 +47,16 @@ const showUpload = async (userId) => {
 
 hanko.onSessionCreated(async (event) => {
   window.hankoToken = await hanko.getSessionToken();
-  const user = await hanko.getUser();
-  const userId = user.username;
+  const user = await hanko.getCurrentUser();
+  const userId = user.username.username;
   showUpload(userId);
 });
 
 const token = await hanko.getSessionToken();
 if (token) {
   window.hankoToken = token;
-  const user = await hanko.getUser();
-  const userId = user.username;
+  const user = await hanko.getCurrentUser();
+  const userId = user.username.username;
   console.log(user);
   showUpload(userId);
 }

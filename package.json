@@ -9,7 +9,7 @@
     "run": "bun utils/list-bunny-accounts.ts"
   },
   "dependencies": {
-    "@teamhanko/hanko-elements": "^2.2.1",
+    "@teamhanko/hanko-elements": "^3.0.0",
     "arachnid-shield-sdk": "github:CdnCentreForChildProtection/arachnid-shield-sdk-ts",
     "htmlhint": "^1.8.0",
     "prismjs": "^1.30.0"

@@ -6,9 +6,9 @@ const token = await hanko.getSessionToken();
 if (!token) {
   window.location.href = '/';
 } else {
-  const user = await hanko.getUser();
-  document.getElementById('username').textContent = user.username;
-  window.originalUsername = user.username; // Store for migration
+  const user = await hanko.getCurrentUser();
+  document.getElementById('username').textContent = user.username.username;
+  window.originalUsername = user.username.username; // Store for migration
 }
 
 hanko.onSessionExpired(() => {
@@ -47,8 +47,8 @@ window.migrateUsername = async function() {
     return;
   }
   
-  const newUser = await hanko.getUser();
-  const newUsername = newUser.username;
+  const newUser = await hanko.getCurrentUser();
+  const newUsername = newUser.username.username;
   const oldUsername = window.originalUsername;
   
   if (oldUsername === newUsername) {
