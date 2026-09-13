@@ -14,7 +14,7 @@
   plausible.init()
 </script>
 <script type="module">
-import { register } from "https://esm.run/@teamhanko/hanko-elements";
+import { register } from "https://esm.run/@teamhanko/hanko-elements@3.0.0";
 
 const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
 
@@ -37,8 +37,8 @@ const token = await hanko.getSessionToken();
 if (!token) {
   window.location.href = '/';
 } else {
-  const user = await hanko.getUser();
-  username = user.username;
+  const user = await hanko.getCurrentUser();
+  username = user.username.username;
   document.getElementById('username').textContent = username;
   loadFiles(token);
 }

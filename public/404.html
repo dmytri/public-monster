@@ -8,15 +8,15 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
 <title>404 - Page Not Found</title>
 <script type="module">
-import { register } from "https://esm.run/@teamhanko/hanko-elements";
+import { register } from "https://esm.run/@teamhanko/hanko-elements@3.0.0";
 
 const { hanko } = await register("HANKO_API_URL_PLACEHOLDER");
 
 const token = await hanko.getSessionToken();
 if (token) {
   window.hankoToken = token;
-  const user = await hanko.getUser();
-  const username = user.username;
+  const user = await hanko.getCurrentUser();
+  const username = user.username.username;
   
   // Get current path
   const path = window.location.pathname;
