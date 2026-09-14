@@ -34,7 +34,6 @@ export function startServer(port: number = 3000, test: Record<string, string | n
   }
 
   const { BUNNY_PULL_ZONE, BUNNY_STORAGE_URL, BUNNY_API_KEY, HANKO_API_URL } = validateEnvironmentVariables();
-  Object.freeze(process.env)
 
   console.log('~ public.monster')
   return Bun.serve({
